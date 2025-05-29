@@ -1,0 +1,4 @@
+/home/mcy-mcy/文档/chatroom/CMakeFiles/client.dir
+/home/mcy-mcy/文档/chatroom/CMakeFiles/server.dir
+/home/mcy-mcy/文档/chatroom/CMakeFiles/edit_cache.dir
+/home/mcy-mcy/文档/chatroom/CMakeFiles/rebuild_cache.dir
