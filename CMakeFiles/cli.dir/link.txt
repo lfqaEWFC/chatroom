@@ -1,1 +1,0 @@
-/usr/bin/c++ CMakeFiles/cli.dir/cli/chat_client.cpp.o CMakeFiles/cli.dir/cli/menu.cpp.o -o cli  -lhiredis -lncurses
