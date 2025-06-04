@@ -5,3 +5,4 @@
 #define SIGNIN 3
 #define BREAK 4
 #define EPSIZE 1024
+#define REACTSIZE 48

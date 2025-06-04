@@ -7,6 +7,8 @@ int main(int argc,char** argv){
 
     char *serve_ip = new char[MSGBUF];
     char *serve_port = new char[MSGBUF];
+    int cfd = 0;
+    char test[100];
     
     sprintf(serve_port,"%d",SERVE_PORT);
     if(argc == 1){
@@ -20,11 +22,16 @@ int main(int argc,char** argv){
     }
 
     cout << serve_ip << "," << serve_port << endl;
-    if(inetconnect(serve_ip,(const char*)serve_port) == -1){
+    cfd  = inetconnect(serve_ip,(const char*)serve_port);
+    if(cfd == -1){
         perror("inetconnect");
         return 0;
     }
-
+    sleep(1);
+    send(cfd,"hello",sizeof("hello"),0);
+    perror("send");
+    recv(cfd,test,sizeof(test),0);
+    cout << test << endl;
     client run_cli;
     run_cli.start();
 
