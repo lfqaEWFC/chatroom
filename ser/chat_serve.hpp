@@ -28,8 +28,7 @@ class serve{
             lfd = inetlisten(portnum);
             cout << portnum << endl;
             if(set_nonblocking(lfd) == -1){
-                perror("inetlisten");
-                cout << lfd << endl;
+                perror("set_nonblocking");
                 startflag = false;
                 return;
             }
@@ -84,7 +83,7 @@ class serve{
                         }
 
                         set_nonblocking(cfd);
-                        
+
                         if(creatflag){
                             init_reactors();
                             creatflag = false;
@@ -97,13 +96,21 @@ class serve{
             }
         }
 
-        for(int i = 0; i < REACTSIZE; i++) {
-            pthread_cancel(reactarr[i].pthreact);
-        }
         return;
     }
 
+    ~serve(){
+        for(int i = 0; i < REACTSIZE; i++) {
+            close(reactarr[i].cefd);
+            close(reactarr[i].eventfd);
+            pthread_cancel(reactarr[i].pthreact);
+        }
+        
+        delete[] reactarr;
+    }
+
     private:
+
         void init_reactors() {
             struct epoll_event ev;
             for(int i = 0; i < REACTSIZE; i++) {
@@ -142,7 +149,6 @@ class serve{
                 
                 if(was_empty) {
                     // 唤醒线程
-                    cout << "idx : " << idx << endl;
                     write(target.eventfd, &event_value, sizeof(event_value));
                 }
             }
@@ -154,9 +160,9 @@ class serve{
             struct epoll_event evlist[EPSIZE];
 
             while(true){
-                cout << "wait" << endl;
+
                 int n = epoll_wait(pthargs->cefd, evlist, EPSIZE, -1);
-                cout << "run" << endl;
+
                 if(n < 0) {
                     perror("epoll_wait");
                     continue;
@@ -185,7 +191,6 @@ class serve{
                             ev.data.fd = fd;
                             ev.events = EPOLLIN | EPOLLET;
                             epoll_ctl(pthargs->cefd, EPOLL_CTL_ADD, fd, &ev);
-                            cout << "ctl_cfd" << endl;
                         }
                         continue;
                     }
@@ -204,7 +209,6 @@ class serve{
                     if(evlist[i].events & EPOLLIN) {
                         char buffer[1024];
                         ssize_t len = recv(evlist[i].data.fd, buffer, sizeof(buffer), 0);
-                        cout << "success_recv" << endl;
                         if(len > 0) {
                             // 简单回显
                             send(evlist[i].data.fd, "hello", sizeof("hello"), 0);
@@ -223,7 +227,6 @@ class serve{
             return nullptr;
         }
         
-        // 排序函数移到类内
         static bool reactcmp(const reactargs& a, const reactargs& b) {
             return a.cnt < b.cnt;
         }
@@ -236,4 +239,5 @@ class serve{
         reactargs *reactarr;
         struct epoll_event lev;
         struct epoll_event levlist[EPSIZE];
+
 };
