@@ -6,3 +6,4 @@
 #define BREAK 4
 #define EPSIZE 1024
 #define REACTSIZE 48
+#define HANDLE_RECV_NUM 96

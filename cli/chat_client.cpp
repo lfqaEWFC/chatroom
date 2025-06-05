@@ -27,11 +27,8 @@ int main(int argc,char** argv){
         perror("inetconnect");
         return 0;
     }
-    send(cfd,"hello",sizeof("hello"),0);
-    perror("send");
-    recv(cfd,test,sizeof(test),0);
-    cout << test << endl;
-    client run_cli;
+
+    client run_cli(cfd);
     run_cli.start();
 
     return 0;

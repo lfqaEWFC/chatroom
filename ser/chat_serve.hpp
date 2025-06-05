@@ -6,11 +6,15 @@
 #include <algorithm>
 #include <mutex>
 #include <queue>
+#include <nlohmann/json.hpp>
+
+using json = nlohmann::json;
 
 typedef struct reactargs{
     int cnt;
     int cefd;
     int eventfd;
+    pool *handle_recv;
     pthread_t pthreact;
     std::queue<int> pending_fds;  // 待处理连接队列
     std::mutex queue_mutex;       // 队列锁
@@ -40,13 +44,14 @@ class serve{
                 return;
             }
             lev.data.fd = lfd;
-            lev.events = EPOLLIN | EPOLLET;  // 添加EPOLLIN
+            lev.events = EPOLLIN | EPOLLET | EPOLLRDHUP;
             if(epoll_ctl(lefd,EPOLL_CTL_ADD,lfd,&lev) == -1){
                 perror("epoll_ctl");
                 startflag = false;
                 return;
             }
 
+            handle_recv = new pool(HANDLE_RECV_NUM);
             reactarr = new reactargs[REACTSIZE];
 
             return;
@@ -61,7 +66,7 @@ class serve{
             int cfd = 0;
             struct epoll_event ev;
 
-            if(lep_cnt < 0){  // 修改错误检查
+            if(lep_cnt < 0){
                 perror("epoll_wait");
                 startflag = false;
                 break;
@@ -70,7 +75,6 @@ class serve{
             // 处理所有就绪事件
             for(int i = 0; i < lep_cnt; i++) {
                 if(levlist[i].data.fd == lfd) {
-                    // 边缘触发模式下循环accept
                     while(true) {
                         cfd = accept(lfd, nullptr, nullptr);
                         if(cfd < 0) {
@@ -117,6 +121,7 @@ class serve{
                 reactarr[i].cefd = epoll_create(EPSIZE);
                 reactarr[i].cnt = 0;
                 reactarr[i].eventfd = eventfd(0, EFD_NONBLOCK);
+                reactarr[i].handle_recv = handle_recv;
                 if(reactarr[i].cefd == -1) {
                     perror("epoll_create");
                     startflag = false;
@@ -189,14 +194,14 @@ class serve{
                             // 添加到epoll
                             struct epoll_event ev;
                             ev.data.fd = fd;
-                            ev.events = EPOLLIN | EPOLLET;
+                            ev.events = EPOLLIN | EPOLLET | EPOLLRDHUP ;
                             epoll_ctl(pthargs->cefd, EPOLL_CTL_ADD, fd, &ev);
                         }
                         continue;
                     }
                     
                     // 处理连接关闭
-                    if(evlist[i].events & (EPOLLHUP | EPOLLERR)) {
+                    if(evlist[i].events & (EPOLLHUP | EPOLLERR | EPOLLRDHUP)) {
                         close(evlist[i].data.fd);
                         {
                             std::lock_guard<std::mutex> lock(pthargs->queue_mutex);
@@ -205,21 +210,9 @@ class serve{
                         continue;
                     }
                     
-                    // 处理可读事件 (测试用)
                     if(evlist[i].events & EPOLLIN) {
-                        char buffer[1024];
-                        ssize_t len = recv(evlist[i].data.fd, buffer, sizeof(buffer), 0);
-                        if(len > 0) {
-                            // 简单回显
-                            send(evlist[i].data.fd, "hello", sizeof("hello"), 0);
-                        } else if(len == 0) {
-                            // 客户端关闭连接
-                            close(evlist[i].data.fd);
-                            {
-                                std::lock_guard<std::mutex> lock(pthargs->queue_mutex);
-                                pthargs->cnt--;
-                            }
-                        }
+                        cout << "react_pthread_cfd : " << evlist[i].data.fd << endl;
+                        pthargs->handle_recv->addtask(handle_recv_func,(void*)&evlist[i].data.fd);
                     }
                 }
             }
@@ -231,12 +224,50 @@ class serve{
             return a.cnt < b.cnt;
         }
 
+        static void *handle_recv_func(void *args){
+            int cfd = *(int*)args;
+            cout << "handle_recv_cfd : " << cfd << endl;
+            char* rec_quest = new char[MAXBUF];
+            int n;
+
+            while((n = recv(cfd,rec_quest,MAXBUF,MSG_DONTWAIT)) != 0){
+                cout << "n : " << n << endl;
+                if(n == -1){
+                    if(errno != EAGAIN && errno != EWOULDBLOCK){
+                        perror("recv");
+                        return nullptr;
+                    }else break;               
+                } 
+            }
+            if(n == 0)
+                return nullptr;
+
+            json json_quest = nlohmann::json::parse(rec_quest);
+            int request = json_quest["request"];
+
+            switch(request){
+                case(LOGIN):
+                    break;
+                case(SIGNIN):{
+                    std::string msg = json_quest["message"];
+                    const char* test = msg.c_str();
+                    int test_len = msg.size();
+                    send(cfd,test,test_len,0);
+                    break;
+                }
+            }
+
+            delete[] rec_quest;
+            return nullptr;
+        }
+
         int lefd;
         int lfd;
-        uint64_t event_value;
         bool startflag;
         bool creatflag;
+        pool *handle_recv;
         reactargs *reactarr;
+        uint64_t event_value;
         struct epoll_event lev;
         struct epoll_event levlist[EPSIZE];
 
