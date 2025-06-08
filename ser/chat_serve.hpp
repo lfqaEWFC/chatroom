@@ -250,9 +250,14 @@ class serve{
                     break;
                 case(SIGNIN):{
                     std::string msg = json_quest["message"];
-                    const char* test = msg.c_str();
-                    int test_len = msg.size();
-                    send(cfd,test,test_len,0);
+                    json test_return = {
+                        {"sort",REFLACT},
+                        {"reflact","signin success"}
+                    };
+                    std::string json_str = test_return.dump();
+                    const char* data = json_str.c_str(); 
+                    size_t data_len = json_str.size();
+                    send(cfd,data,data_len,0);
                     break;
                 }
             }
@@ -272,3 +277,7 @@ class serve{
         struct epoll_event levlist[EPSIZE];
 
 };
+
+//问题：
+//  1.怎么处理客户端在线期间的通知机制，以及对于其他客户端以及群组的消息的接受；
+//  2.在传输文件的时候怎么保证文件数据与正常消息在并行传输的时候不会发生混淆与错误；
