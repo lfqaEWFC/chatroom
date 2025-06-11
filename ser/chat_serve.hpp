@@ -1,6 +1,8 @@
 #include "/home/mcy-mcy/文档/chatroom/include/inetsockets_tcp.hpp"
 #include "/home/mcy-mcy/文档/chatroom/define/define.hpp"
 #include "/home/mcy-mcy/文档/chatroom/include/Threadpool.hpp"
+#include "/home/mcy-mcy/文档/chatroom/Database/Database.hpp"
+#include "serve.hpp"
 #include <sys/epoll.h>
 #include <sys/eventfd.h>
 #include <algorithm>
@@ -16,9 +18,15 @@ typedef struct reactargs{
     int eventfd;
     pool *handle_recv;
     pthread_t pthreact;
-    std::queue<int> pending_fds;  // 待处理连接队列
-    std::mutex queue_mutex;       // 队列锁
+    queue<int> pending_fds;  // 待处理连接队列
+    mutex queue_mutex;       // 队列锁
 } reactargs;
+
+typedef struct handle_recv_args{
+    int cfd;
+    int *reactcnt;
+    mutex *react_quene_mutex;
+}handle_recv_args;
 
 class serve{
 
@@ -72,14 +80,12 @@ class serve{
                 break;
             }
             
-            // 处理所有就绪事件
             for(int i = 0; i < lep_cnt; i++) {
                 if(levlist[i].data.fd == lfd) {
                     while(true) {
                         cfd = accept(lfd, nullptr, nullptr);
                         if(cfd < 0) {
                             if(errno == EAGAIN || errno == EWOULDBLOCK) {
-                                // 所有连接已处理
                                 break;
                             }
                             perror("accept");
@@ -106,8 +112,9 @@ class serve{
     ~serve(){
         for(int i = 0; i < REACTSIZE; i++) {
             close(reactarr[i].cefd);
-            close(reactarr[i].eventfd);
             pthread_cancel(reactarr[i].pthreact);
+            pthread_join(reactarr[i].pthreact, nullptr); 
+            close(reactarr[i].eventfd);       
         }
         
         delete[] reactarr;
@@ -147,13 +154,12 @@ class serve{
         void assign_connection(int cfd, int idx) {
             reactargs& target = reactarr[idx];
             {
-                std::lock_guard<std::mutex> lock(target.queue_mutex);
+                lock_guard<mutex> lock(target.queue_mutex);
                 bool was_empty = target.pending_fds.empty();
                 target.pending_fds.push(cfd);
-                target.cnt++;  // 增加连接计数
+                target.cnt++;
                 
                 if(was_empty) {
-                    // 唤醒线程
                     write(target.eventfd, &event_value, sizeof(event_value));
                 }
             }
@@ -174,16 +180,14 @@ class serve{
                 }
                 
                 for(int i = 0; i < n; i++){
-                    // 处理唤醒事件
+
                     if(evlist[i].data.fd == pthargs->eventfd) {
-                        // 完全读取eventfd
                         uint64_t count;
                         while(read(pthargs->eventfd, &count, sizeof(count)) > 0);
                         
-                        // 处理所有待处理连接
                         std::queue<int> temp_queue;
                         {
-                            std::lock_guard<std::mutex> lock(pthargs->queue_mutex);
+                            lock_guard<mutex> lock(pthargs->queue_mutex);
                             temp_queue.swap(pthargs->pending_fds);
                         }
                         
@@ -191,28 +195,38 @@ class serve{
                             int fd = temp_queue.front();
                             temp_queue.pop();
                             
-                            // 添加到epoll
                             struct epoll_event ev;
                             ev.data.fd = fd;
                             ev.events = EPOLLIN | EPOLLET | EPOLLRDHUP ;
-                            epoll_ctl(pthargs->cefd, EPOLL_CTL_ADD, fd, &ev);
+                            if (epoll_ctl(pthargs->cefd, EPOLL_CTL_ADD, fd, &ev) == -1) {
+                                perror("epoll_ctl ADD");
+                                close(fd);
+                                {
+                                    lock_guard<mutex> lock(pthargs->queue_mutex);
+                                    pthargs->cnt--;
+                                }
+                                continue;
+                            }
                         }
                         continue;
                     }
                     
-                    // 处理连接关闭
                     if(evlist[i].events & (EPOLLHUP | EPOLLERR | EPOLLRDHUP)) {
                         close(evlist[i].data.fd);
+                        epoll_ctl(pthargs->cefd, EPOLL_CTL_DEL, evlist[i].data.fd, nullptr);
                         {
-                            std::lock_guard<std::mutex> lock(pthargs->queue_mutex);
-                            pthargs->cnt--;  // 减少连接计数
+                            lock_guard<mutex> lock(pthargs->queue_mutex);
+                            pthargs->cnt--;
                         }
                         continue;
                     }
                     
                     if(evlist[i].events & EPOLLIN) {
-                        cout << "react_pthread_cfd : " << evlist[i].data.fd << endl;
-                        pthargs->handle_recv->addtask(handle_recv_func,(void*)&evlist[i].data.fd);
+                        handle_recv_args *args = new handle_recv_args;
+                        args->cfd = evlist[i].data.fd;
+                        args->reactcnt = &pthargs->cnt;
+                        args->react_quene_mutex = &pthargs->queue_mutex;
+                        pthargs->handle_recv->addtask(handle_recv_func,args);
                     }
                 }
             }
@@ -225,22 +239,57 @@ class serve{
         }
 
         static void *handle_recv_func(void *args){
-            int cfd = *(int*)args;
-            cout << "handle_recv_cfd : " << cfd << endl;
+            handle_recv_args *new_args = (handle_recv_args*)args;
             char* rec_quest = new char[MAXBUF];
-            int n;
+            static thread_local database* db = nullptr;
 
-            while((n = recv(cfd,rec_quest,MAXBUF,MSG_DONTWAIT)) != 0){
-                cout << "n : " << n << endl;
+            if (!db) {
+                db = new database("localhost", 0, "root", nullptr, "chat_database", "localhost", 6379);
+                if (!db->is_connected()) {
+                    cerr << "Connect Database Error" << endl;
+                    json sendjson{
+                        {"sort",ERROR},
+                        {"reflact","数据库连接失败..."},
+                    };
+                    string json_str = sendjson.dump();
+                    const char* data = json_str.c_str(); 
+                    size_t data_len = json_str.size();
+                    char *recvbuf = new char[MAXBUF]; 
+                    send(new_args->cfd,data,data_len,0);
+                    delete db;
+                    db = nullptr;
+                    delete new_args;
+                    return nullptr;
+                }
+            }
+
+            int n;
+            while((n = recv(new_args->cfd,rec_quest,MAXBUF,MSG_DONTWAIT)) != 0){
                 if(n == -1){
                     if(errno != EAGAIN && errno != EWOULDBLOCK){
                         perror("recv");
+                        close(new_args->cfd);
+                        {
+                            lock_guard<mutex> lock(*new_args->react_quene_mutex);
+                            (*new_args->reactcnt)--;
+                        }
+                        delete new_args;
+                        delete[] rec_quest;
                         return nullptr;
                     }else break;               
                 } 
             }
-            if(n == 0)
+            if(n == 0){
+                close(new_args->cfd);
+                {
+                    lock_guard<mutex> lock(*new_args->react_quene_mutex);
+                    (*new_args->reactcnt)--;
+                }
+                delete new_args;
+                delete[] rec_quest;
                 return nullptr;
+            }
+                
 
             json json_quest = nlohmann::json::parse(rec_quest);
             int request = json_quest["request"];
@@ -248,21 +297,35 @@ class serve{
             switch(request){
                 case(LOGIN):
                     break;
-                case(SIGNIN):{
-                    std::string msg = json_quest["message"];
-                    json test_return = {
-                        {"sort",REFLACT},
-                        {"reflact","signin success"}
-                    };
-                    std::string json_str = test_return.dump();
-                    const char* data = json_str.c_str(); 
-                    size_t data_len = json_str.size();
-                    send(cfd,data,data_len,0);
-                    break;
-                }
+                case(SIGNIN):
+                    if(handle_signin(json_quest,db)){
+                        json sendjson{
+                            {"sort",REFLACT},
+                            {"reflact","注册成功，请进行下一步操作"},
+                        };
+                        string json_str = sendjson.dump();
+                        const char* data = json_str.c_str(); 
+                        size_t data_len = json_str.size();
+                        char *recvbuf = new char[MAXBUF]; 
+                        send(new_args->cfd,data,data_len,0);
+                        break;
+                    }else{
+                        json sendjson{
+                            {"sort",REFLACT},
+                            {"reflact","注册失败，请重新注册"},
+                        };
+                        string json_str = sendjson.dump();
+                        const char* data = json_str.c_str(); 
+                        size_t data_len = json_str.size();
+                        char *recvbuf = new char[MAXBUF]; 
+                        send(new_args->cfd,data,data_len,0);
+                        break;
+                    }
             }
 
             delete[] rec_quest;
+            delete new_args;
+
             return nullptr;
         }
 
@@ -277,7 +340,3 @@ class serve{
         struct epoll_event levlist[EPSIZE];
 
 };
-
-//问题：
-//  1.怎么处理客户端在线期间的通知机制，以及对于其他客户端以及群组的消息的接受；
-//  2.在传输文件的时候怎么保证文件数据与正常消息在并行传输的时候不会发生混淆与错误；

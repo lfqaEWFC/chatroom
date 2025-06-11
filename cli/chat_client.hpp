@@ -3,6 +3,7 @@
 #include "/home/mcy-mcy/文档/chatroom/define/define.hpp"
 #include "/home/mcy-mcy/文档/chatroom/include/Threadpool.hpp"
 #include <sys/epoll.h>
+#include "User.hpp"
 #include <nlohmann/json.hpp>
 
 using json = nlohmann::json;
@@ -52,15 +53,15 @@ class client: public menu{
                     
                 }
                 else if(start_choice == SIGNIN){
-                    json signin = {
-                        {"request",SIGNIN},
-                        {"message","this is signin"}
-                    };
-                    std::string json_str = signin.dump();
+                    system("clear");
+                    json *signin;
+                    handle_signin(signin);
+                    string json_str = signin->dump();
                     const char* data = json_str.c_str(); 
                     size_t data_len = json_str.size();
                     char *recvbuf = new char[MAXBUF]; 
                     send(cfd,data,data_len,0);
+                    pthread_cond_wait(&recv_cond,&recv_lock);
                 }
                 else if(start_choice == BREAK){
                     
@@ -69,7 +70,8 @@ class client: public menu{
                     cout << "请输入正确的选项..." << endl;
                     continue;
                 }
-                
+
+                system("clear");
 
             }
             
@@ -94,10 +96,12 @@ class client: public menu{
             char *recvbuf = new char[MAXBUF];
 
             while(true){
+
                 int n = epoll_wait(new_args->epfd,evlist,1,-1);
                 for(int i=0;i < n;i++){
                     if(evlist[0].events & (EPOLLHUP | EPOLLERR | EPOLLRDHUP)){
                         cout << "服务器已关闭，即将退出程序...." << endl;
+                        pthread_cond_signal(new_args->recv_cond);
                         *new_args->endflag = true;
                         return nullptr;
                     }
@@ -114,10 +118,18 @@ class client: public menu{
                         json recvjson = nlohmann::json::parse(recvbuf);
                         if(recvjson["sort"] == REFLACT){
                             cout << recvjson["reflact"] << endl;
+                            sleep(1);
+                            pthread_cond_signal(new_args->recv_cond);
                             continue;
                         }
                         else if(recvjson["sort"] == MESSAGE){
                             continue;
+                        }
+                        else if(recvjson["sort"] == ERROR){
+                            cout << "发生错误 : " << recvjson["reflact"] << endl;
+                            *new_args->endflag = true;
+                            sleep(1);
+                            pthread_cond_signal(new_args->recv_cond);
                         }
                         else{
                             cout << "接受信息类型错误" << endl;

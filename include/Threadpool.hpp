@@ -17,10 +17,8 @@ class pool
     public:
 
     pool(size_t pthread_num);
-
     //function: typedef void* (*typ_function)(void*)
     void addtask(typ_function taskfunction,void* arg);
-
     void wait();
 
     ~pool();

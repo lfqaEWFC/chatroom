@@ -6,6 +6,7 @@
 #define BREAK 4
 #define REFLACT 1000
 #define MESSAGE 2000
+#define ERROR 3000
 #define EPSIZE 1024
 #define REACTSIZE 48
 #define HANDLE_RECV_NUM 96

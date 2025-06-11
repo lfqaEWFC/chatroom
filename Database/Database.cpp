@@ -1,0 +1,80 @@
+#include "Database.hpp"
+
+database::database(const char *mysql_host,int mysql_port,const char* mysql_user,const char* mysql_pass,const char* mysql_db,const char *redis_host,int redis_port):
+mysql_conn(nullptr), redis_conn(nullptr), connected(false){
+    mysql_conn = mysql_init(nullptr);
+    if (!mysql_conn) {
+        cerr << "MySQL Init Error" << endl;
+        connected = false;
+        return;
+    }
+    connected = connect_mysql(mysql_host,mysql_user,mysql_pass,mysql_db,mysql_port) && connect_redis(redis_host,redis_port);
+}
+
+bool database::connect_mysql(const char* host,const char* user,const char* pass,const char* db, int port){
+    if (!mysql_real_connect(mysql_conn, host, user, pass, db, port, nullptr, 0)) {
+        std::cerr << "MySQL Connect Error: " << mysql_error(mysql_conn) << std::endl;
+        return false;
+    }
+    return true;
+}
+
+bool database::connect_redis(const char* host, int port){
+    redis_conn = redisConnect(host, port);
+    if (redis_conn == nullptr || redis_conn->err) {
+        std::cerr << "Redis Connect Error: " << (redis_conn ? redis_conn->errstr : "null") << std::endl;
+        return false;
+    }
+    return true;
+}
+
+database::~database(){
+    if (mysql_conn) {
+        mysql_close(mysql_conn);
+    }
+    if (redis_conn) {
+        redisFree(redis_conn);
+    }
+}
+
+bool database::execute_sql(const string& sql){
+    if (mysql_query(mysql_conn, sql.c_str())) {
+        std::cerr << "MySQL Exec Error: " << mysql_error(mysql_conn) << std::endl;
+        return false;
+    }
+    return true;
+}
+
+MYSQL_RES* database::query_sql(const string& sql){
+    if (mysql_query(mysql_conn, sql.c_str())) {
+        std::cerr << "MySQL Query Error: " << mysql_error(mysql_conn) << std::endl;
+        return nullptr;
+    }
+    return mysql_store_result(mysql_conn);
+}
+
+void database::free_reply(redisReply* reply){
+    if(reply){
+        freeReplyObject(reply); 
+    }
+}
+
+redisReply* database::execRedis(const std::string& command){
+    redisReply* reply = (redisReply*)redisCommand(redis_conn, command.c_str());
+    if (!reply) {
+        std::cerr << "Redis Error: " << redis_conn->errstr << std::endl;
+        return nullptr;
+    }
+
+    return reply;
+}
+
+void database::free_result(MYSQL_RES* result){
+    if (result) {
+        mysql_free_result(result);
+    }
+}
+
+bool database::is_connected() const {
+    return connected;
+}
