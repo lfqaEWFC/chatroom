@@ -7,5 +7,6 @@ class menu{
     public:
 
     void start_show();
+    void chat_show();
 
 };

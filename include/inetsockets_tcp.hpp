@@ -6,7 +6,9 @@
 #include<arpa/inet.h>
 #include<unistd.h>
 #include<fcntl.h>
+#include <nlohmann/json.hpp>
 
+using json = nlohmann::json;
 using namespace std;
 
 #define BACKLOG 50
@@ -17,3 +19,4 @@ int inetlisten(const char *portnum);
 int inetconnect(char *service,const char *portnum);
 char* address_str_portnum(char *result,ssize_t max_resultlen,sockaddr *addr,socklen_t addrlen);
 int set_nonblocking(int fd);
+bool sendjson(json sendjson,int cfd);

@@ -16,3 +16,10 @@ void menu::start_show(){
 
     return;
 }
+
+void menu::chat_show(){
+    
+    cout << "this is chat menu" << endl;
+
+    return;
+}

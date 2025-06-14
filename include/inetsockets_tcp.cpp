@@ -146,3 +146,16 @@ int set_nonblocking(int fd) {
     }
     return 0;
 }
+
+bool sendjson(json sendjson,int cfd){
+
+    string json_str = sendjson.dump();
+    const char* data = json_str.c_str(); 
+    size_t data_len = json_str.size();
+    if(send(cfd,data,data_len,0) == -1){
+        perror("send");
+        return false;
+    }
+
+    return true;
+}

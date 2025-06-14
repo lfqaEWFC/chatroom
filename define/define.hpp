@@ -4,6 +4,9 @@
 #define LOGOUT 2
 #define SIGNIN 3
 #define BREAK 4
+#define FORGET_PASSWORD 5
+#define CHECK_ANS 6
+#define IN_ONLINE 7
 #define REFLACT 1000
 #define MESSAGE 2000
 #define ERROR 3000

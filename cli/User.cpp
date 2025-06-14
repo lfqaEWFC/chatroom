@@ -49,6 +49,52 @@ int handle_signin(json* signin){
         {"ans",answer},
     };
 
+    delete[] username;
+    delete[] password;
+    delete[] checkpw;
+
     return 0;
 
+}
+
+bool handle_login(json *login){
+
+    char *in_user = new char[64];
+    string in_password;
+
+    cout << "请输入用户名称 : " << endl;
+    cin >> in_user;
+    cout << "请输入用户密码 : " << endl;
+    cout << "如果忘记密码,请输入Y以获取密保问题..." << endl;
+    cin >> in_password;
+
+    if(in_password == "Y"){
+        *login = {
+            {"request",FORGET_PASSWORD},
+            {"username",in_user}
+        };
+        return true;
+    }
+
+    *login = {
+        {"request",LOGIN},
+        {"username",in_user},
+        {"password",in_password}
+    };
+
+    cout << "end login" << endl;
+
+    return true;
+}
+
+void handle_success_login(int cfd,string username){
+
+    json send_json = {
+        {"request",IN_ONLINE},
+        {"username",username}
+    };
+
+    sendjson(send_json,cfd);
+
+    return;
 }

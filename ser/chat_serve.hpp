@@ -247,15 +247,11 @@ class serve{
                 db = new database("localhost", 0, "root", nullptr, "chat_database", "localhost", 6379);
                 if (!db->is_connected()) {
                     cerr << "Connect Database Error" << endl;
-                    json sendjson{
+                    json send_json{
                         {"sort",ERROR},
                         {"reflact","数据库连接失败..."},
                     };
-                    string json_str = sendjson.dump();
-                    const char* data = json_str.c_str(); 
-                    size_t data_len = json_str.size();
-                    char *recvbuf = new char[MAXBUF]; 
-                    send(new_args->cfd,data,data_len,0);
+                    sendjson(send_json,new_args->cfd);
                     delete db;
                     db = nullptr;
                     delete new_args;
@@ -295,32 +291,57 @@ class serve{
             int request = json_quest["request"];
 
             switch(request){
-                case(LOGIN):
+                case(LOGIN):{
+                    json *reflact = new json;
+                    handle_login(json_quest, db, reflact);                
+                    sendjson(*reflact,new_args->cfd);
+                    delete reflact;
                     break;
-                case(SIGNIN):
-                    if(handle_signin(json_quest,db)){
-                        json sendjson{
-                            {"sort",REFLACT},
-                            {"reflact","注册成功，请进行下一步操作"},
+                }
+                case(FORGET_PASSWORD):{
+                    json *reflact = new json;
+                    handle_forget_password(json_quest,db,reflact);                                
+                    sendjson(*reflact,new_args->cfd);
+                    delete reflact;
+                    break;
+                }
+                case(CHECK_ANS):{
+                    json *reflact = new json;
+                    handle_check_answer(json_quest,db,reflact);
+                    sendjson(*reflact,new_args->cfd);
+                    delete reflact;
+                    break;
+                }
+                case(IN_ONLINE):{
+                    if(handle_in_online(json_quest,db) == false){
+                        json send_json{
+                            {"sort",ERROR},
+                            {"reflact","服务端处理在线用户集合发生错误..."},
                         };
-                        string json_str = sendjson.dump();
-                        const char* data = json_str.c_str(); 
-                        size_t data_len = json_str.size();
-                        char *recvbuf = new char[MAXBUF]; 
-                        send(new_args->cfd,data,data_len,0);
-                        break;
-                    }else{
-                        json sendjson{
-                            {"sort",REFLACT},
-                            {"reflact","注册失败，请重新注册"},
-                        };
-                        string json_str = sendjson.dump();
-                        const char* data = json_str.c_str(); 
-                        size_t data_len = json_str.size();
-                        char *recvbuf = new char[MAXBUF]; 
-                        send(new_args->cfd,data,data_len,0);
+                        sendjson(send_json,new_args->cfd);
                         break;
                     }
+                    break;
+                }
+                case(SIGNIN):{
+                    if(handle_signin(json_quest,db)){
+                        json send_json{
+                            {"sort",REFLACT},
+                            {"request",SIGNIN},
+                            {"reflact","注册成功，请进行下一步操作"},
+                        };
+                        sendjson(send_json,new_args->cfd);
+                        break;
+                    }else{
+                        json send_json{
+                            {"sort",REFLACT},
+                            {"request",SIGNIN},
+                            {"reflact","注册失败，请重新注册"},
+                        };
+                        sendjson(send_json,new_args->cfd);
+                        break;
+                    }
+                }
             }
 
             delete[] rec_quest;

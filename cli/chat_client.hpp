@@ -11,7 +11,9 @@ using json = nlohmann::json;
 typedef struct recv_args{
     int cfd;
     int epfd;
+    string *username;
     bool *endflag;
+    bool *end_chat_flag;
     pthread_cond_t *recv_cond;    
     pthread_mutex_t *recv_lock;
 }recv_args;
@@ -21,7 +23,8 @@ class client: public menu{
     public:
 
         client(int in_cfd):
-        endflag(false),start_choice(0),cfd(in_cfd){
+        endflag(false),end_chat_flag(true),sendlogin_flag(true),
+        chat_choice(0),start_choice(0),cfd(in_cfd){
 
             epfd = epoll_create(EPSIZE);
             ev.data.fd = cfd;
@@ -32,6 +35,8 @@ class client: public menu{
             args->cfd = cfd;
             args->endflag = &endflag;
             args->epfd = epfd;
+            args->end_chat_flag = &end_chat_flag;
+            args->username = &username;
             pthread_cond_init(&recv_cond,nullptr);
             pthread_mutex_init(&recv_lock,nullptr);
             args->recv_cond = &recv_cond;
@@ -47,7 +52,12 @@ class client: public menu{
                 cin >> start_choice;
 
                 if(start_choice == LOGIN){
-                    
+                    system("clear");
+                    json *login = new json;
+                    handle_login(login);
+                    sendjson(*login,cfd);
+                    delete login;
+                    pthread_cond_wait(&recv_cond,&recv_lock);
                 }
                 else if(start_choice == LOGOUT){
                     
@@ -56,11 +66,7 @@ class client: public menu{
                     system("clear");
                     json *signin;
                     handle_signin(signin);
-                    string json_str = signin->dump();
-                    const char* data = json_str.c_str(); 
-                    size_t data_len = json_str.size();
-                    char *recvbuf = new char[MAXBUF]; 
-                    send(cfd,data,data_len,0);
+                    sendjson(*signin,cfd);
                     pthread_cond_wait(&recv_cond,&recv_lock);
                 }
                 else if(start_choice == BREAK){
@@ -74,6 +80,21 @@ class client: public menu{
                 system("clear");
 
             }
+
+            while(!end_chat_flag){
+
+                if(sendlogin_flag){
+                    handle_success_login(cfd,username);
+                    sendlogin_flag = false;
+                }
+
+                this->chat_show();
+                cin >> chat_choice;
+
+                switch(chat_choice){
+                    
+                }
+            }
             
         }
 
@@ -82,8 +103,12 @@ class client: public menu{
         int cfd;
         int epfd;
         bool endflag;
+        bool sendlogin_flag;
+        bool end_chat_flag;
+        string username;
         recv_args *args;
         int start_choice;
+        int chat_choice;
         struct epoll_event ev;
         pthread_t recv_pthread;
         pthread_cond_t recv_cond;
@@ -117,7 +142,44 @@ class client: public menu{
                         }
                         json recvjson = nlohmann::json::parse(recvbuf);
                         if(recvjson["sort"] == REFLACT){
-                            cout << recvjson["reflact"] << endl;
+                            if(recvjson["request"] == SIGNIN){
+                                cout << recvjson["reflact"] << endl;
+                            }
+                            else if(recvjson["request"] == LOGIN){
+                                if(recvjson["login_flag"]){
+                                    *new_args->endflag = true;
+                                    *new_args->end_chat_flag = false;
+                                    *new_args->username = recvjson["username"];
+                                }
+                                cout << recvjson["reflact"] << endl;
+                            }
+                            else if(recvjson["request"] == FORGET_PASSWORD){
+                                if(recvjson["que_flag"]){
+                                    char *in_ans = new char[64];
+                                    cout << "密保问题: " << recvjson["reflact"] << endl;
+                                    cout << "请输入答案" << endl;
+                                    cin >> in_ans;
+                                    json send_json = {
+                                        {"request",CHECK_ANS},
+                                        {"username",recvjson["username"]},
+                                        {"answer",in_ans}
+                                    };
+                                    sendjson(send_json,new_args->cfd);
+                                    continue;
+                                }
+                                else{
+                                    cout << recvjson["reflact"] << endl;
+                                }
+                            }
+                            else if(recvjson["request"] == CHECK_ANS){
+                                if(recvjson["ans_flag"]){
+                                    *new_args->endflag = true;
+                                    *new_args->end_chat_flag = false;
+                                    *new_args->username = recvjson["username"];
+                                }
+                                cout << recvjson["reflact"] << endl;
+                            }
+                            else{}
                             sleep(1);
                             pthread_cond_signal(new_args->recv_cond);
                             continue;
