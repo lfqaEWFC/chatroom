@@ -22,6 +22,7 @@ class database{
     void free_result(MYSQL_RES* result); //释放result的空间
 
     redisReply* execRedis(const string& command);
+    bool redis_del_online_user(const std::string& username);
     void free_reply(redisReply* reply);
     
     bool is_connected() const;

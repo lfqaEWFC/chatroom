@@ -1,6 +1,6 @@
 #include "serve.hpp"
 
-bool handle_signin(json json_quest, database *db) {
+bool handle_signin(json json_quest, unique_ptr<database> &db) {
 
     MYSQL_RES* res = db->query_sql("SHOW TABLES LIKE 'user'");
     
@@ -35,7 +35,7 @@ bool handle_signin(json json_quest, database *db) {
     return true;
 }
 
-bool handle_forget_password(json json_quest,database *db,json *reflact){
+bool handle_forget_password(json json_quest,unique_ptr<database> &db,json *reflact){
 
     string recv_username = json_quest["username"];
 
@@ -78,7 +78,7 @@ bool handle_forget_password(json json_quest,database *db,json *reflact){
     return false;
 }
 
-bool handle_login(json json_quest,database *db,json *reflact){
+bool handle_login(json json_quest,unique_ptr<database> &db,json *reflact){
 
     string recv_username = json_quest["username"];
     string recv_password = json_quest["password"];
@@ -135,7 +135,7 @@ bool handle_login(json json_quest,database *db,json *reflact){
 
 }
 
-bool handle_check_answer(json json_quest,database *db,json *reflact){
+bool handle_check_answer(json json_quest,unique_ptr<database> &db,json *reflact){
 
     string recv_answer = json_quest["answer"];
     string recv_username = json_quest["username"];
@@ -191,7 +191,7 @@ bool handle_check_answer(json json_quest,database *db,json *reflact){
     return false;
 }
 
-bool handle_in_online(json json_quest,database *db){
+bool handle_in_online(json json_quest,unique_ptr<database> &db){
 
     string recv_username = json_quest["username"];
     redisReply *online_reply = new redisReply;

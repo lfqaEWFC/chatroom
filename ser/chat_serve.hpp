@@ -18,14 +18,16 @@ typedef struct reactargs{
     int eventfd;
     pool *handle_recv;
     pthread_t pthreact;
-    queue<int> pending_fds;  // 待处理连接队列
-    mutex queue_mutex;       // 队列锁
+    queue<int> pending_fds;  
+    mutex queue_mutex;
+    unordered_map<int, string>* cfd_to_user;      
 } reactargs;
 
 typedef struct handle_recv_args{
     int cfd;
     int *reactcnt;
     mutex *react_quene_mutex;
+    unordered_map<int, string>* cfd_to_user;
 }handle_recv_args;
 
 class serve{
@@ -61,6 +63,14 @@ class serve{
 
             handle_recv = new pool(HANDLE_RECV_NUM);
             reactarr = new reactargs[REACTSIZE];
+
+            database db("localhost", 0, "root", nullptr, "chat_database", "localhost", 6379);
+            redisReply* reply = db.execRedis("DEL online_users");
+            if(reply == nullptr){
+                cerr << "Main Redis DB DEL online_users Error" << endl;
+                startflag = false;
+                return;
+            }
 
             return;
 
@@ -117,6 +127,7 @@ class serve{
             close(reactarr[i].eventfd);       
         }
         
+        delete handle_recv;
         delete[] reactarr;
     }
 
@@ -129,6 +140,7 @@ class serve{
                 reactarr[i].cnt = 0;
                 reactarr[i].eventfd = eventfd(0, EFD_NONBLOCK);
                 reactarr[i].handle_recv = handle_recv;
+                reactarr[i].cfd_to_user = &cfd_to_user;
                 if(reactarr[i].cefd == -1) {
                     perror("epoll_create");
                     startflag = false;
@@ -213,9 +225,23 @@ class serve{
                     
                     if(evlist[i].events & (EPOLLHUP | EPOLLERR | EPOLLRDHUP)) {
                         close(evlist[i].data.fd);
+                        cout << "close : " << evlist[i].data.fd << endl;
                         epoll_ctl(pthargs->cefd, EPOLL_CTL_DEL, evlist[i].data.fd, nullptr);
                         {
                             lock_guard<mutex> lock(pthargs->queue_mutex);
+                            auto it = pthargs->cfd_to_user->find(evlist[i].data.fd);
+                            static thread_local unique_ptr<database> db = nullptr;
+                            if(it != pthargs->cfd_to_user->end()){
+                                string username = it->second;
+                                pthargs->cfd_to_user->erase(it);
+                                if (!db) {
+                                    db = make_unique<database>("localhost", 0, "root", nullptr, "chat_database", "localhost", 6379);
+                                    if (!db->is_connected()) {
+                                        cerr << "React Redis DB connect error" << endl;
+                                    }
+                                }
+                                db->redis_del_online_user(username);
+                            }
                             pthargs->cnt--;
                         }
                         continue;
@@ -226,6 +252,7 @@ class serve{
                         args->cfd = evlist[i].data.fd;
                         args->reactcnt = &pthargs->cnt;
                         args->react_quene_mutex = &pthargs->queue_mutex;
+                        args->cfd_to_user = pthargs->cfd_to_user;
                         pthargs->handle_recv->addtask(handle_recv_func,args);
                     }
                 }
@@ -241,10 +268,10 @@ class serve{
         static void *handle_recv_func(void *args){
             handle_recv_args *new_args = (handle_recv_args*)args;
             char* rec_quest = new char[MAXBUF];
-            static thread_local database* db = nullptr;
+            static thread_local unique_ptr<database> db = nullptr;
 
             if (!db) {
-                db = new database("localhost", 0, "root", nullptr, "chat_database", "localhost", 6379);
+                db = make_unique<database>("localhost", 0, "root", nullptr, "chat_database", "localhost", 6379);
                 if (!db->is_connected()) {
                     cerr << "Connect Database Error" << endl;
                     json send_json{
@@ -252,7 +279,6 @@ class serve{
                         {"reflact","数据库连接失败..."},
                     };
                     sendjson(send_json,new_args->cfd);
-                    delete db;
                     db = nullptr;
                     delete new_args;
                     return nullptr;
@@ -268,6 +294,12 @@ class serve{
                         {
                             lock_guard<mutex> lock(*new_args->react_quene_mutex);
                             (*new_args->reactcnt)--;
+                            auto it = new_args->cfd_to_user->find(new_args->cfd);
+                            if(it != new_args->cfd_to_user->end()){
+                                string username = it->second;
+                                db->redis_del_online_user(username);
+                                new_args->cfd_to_user->erase(it);
+                            }
                         }
                         delete new_args;
                         delete[] rec_quest;
@@ -280,6 +312,12 @@ class serve{
                 {
                     lock_guard<mutex> lock(*new_args->react_quene_mutex);
                     (*new_args->reactcnt)--;
+                    auto it = new_args->cfd_to_user->find(new_args->cfd);
+                    if(it != new_args->cfd_to_user->end()){
+                        string username = it->second;
+                        db->redis_del_online_user(username);
+                        new_args->cfd_to_user->erase(it);
+                    }
                 }
                 delete new_args;
                 delete[] rec_quest;
@@ -293,7 +331,7 @@ class serve{
             switch(request){
                 case(LOGIN):{
                     json *reflact = new json;
-                    handle_login(json_quest, db, reflact);                
+                    handle_login(json_quest,db,reflact);                
                     sendjson(*reflact,new_args->cfd);
                     delete reflact;
                     break;
@@ -321,6 +359,7 @@ class serve{
                         sendjson(send_json,new_args->cfd);
                         break;
                     }
+                    (*new_args->cfd_to_user)[new_args->cfd] = json_quest["username"];
                     break;
                 }
                 case(SIGNIN):{
@@ -359,5 +398,6 @@ class serve{
         uint64_t event_value;
         struct epoll_event lev;
         struct epoll_event levlist[EPSIZE];
+        unordered_map<int, string> cfd_to_user;
 
 };

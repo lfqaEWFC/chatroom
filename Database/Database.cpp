@@ -78,3 +78,12 @@ void database::free_result(MYSQL_RES* result){
 bool database::is_connected() const {
     return connected;
 }
+
+bool database::redis_del_online_user(const string& username) {
+    if (!redis_conn) return false;
+    string new_username = "'" + username + "'";
+    redisReply* reply = (redisReply*)redisCommand(redis_conn, "SREM online_users %s", new_username.c_str());
+    if (!reply) return false;
+    freeReplyObject(reply);
+    return true;
+}
