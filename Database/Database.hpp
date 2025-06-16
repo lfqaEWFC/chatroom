@@ -20,6 +20,7 @@ class database{
     bool execute_sql(const string& sql); //执行mysql命令，改变mysql库中的数据并通过返回bool来反馈是否成功执行
     MYSQL_RES* query_sql(const string& sql); //执行mysql命令，向mysql库中获取数据并返回
     void free_result(MYSQL_RES* result); //释放result的空间
+    MYSQL* get_mysql_conn();//获取mysql的连接句柄
 
     redisReply* execRedis(const string& command);
     bool redis_del_online_user(const std::string& username);

@@ -217,3 +217,66 @@ bool handle_in_online(json json_quest,unique_ptr<database> &db){
     
     return true;
 }
+
+bool handle_logout(json json_quest, unique_ptr<database> &db, json *reflact, unordered_map<int, string>* cfd_to_user) {
+    
+    string recv_username = json_quest["username"];
+
+    for (auto it = cfd_to_user->begin(); it != cfd_to_user->end(); ++it) {
+        if (it->second == recv_username) {
+            int cfd = it->first;
+            db->redis_del_online_user(recv_username);
+            cfd_to_user->erase(it);
+            *reflact = {
+                {"sort", REFLACT},
+                {"request", LOGOUT},
+                {"reflact", "用户成功退出"}
+            };
+            return true;
+        }
+    }
+
+    *reflact = {
+        {"sort", ERROR},
+        {"reflact", "退出失败，用户不在线或未注册..."}
+    };
+
+    return false;
+}
+
+bool handle_break(json json_quest,unique_ptr<database> &db,json *reflact){
+
+    string break_username = json_quest["username"];
+    string break_password = json_quest["password"];
+
+    string sql = "DELETE FROM user WHERE username = '" + break_username + "' AND password = '" + break_password + "'";
+    bool res = db->execute_sql(sql);
+
+    if(!res){
+        *reflact = {
+            {"sort",ERROR},
+            {"reflact","服务端查询用户表异常..."}
+        };
+        return false;
+    }
+    else{
+        my_ulonglong affected = mysql_affected_rows(db->get_mysql_conn());
+
+        if (affected == 0) {
+            *reflact = {
+                {"sort", REFLACT},
+                {"request",BREAK},
+                {"reflact", "注销失败，用户名或密码错误..."}
+            };
+        } 
+        else {
+            *reflact = {
+                {"sort", REFLACT},
+                {"request",BREAK},
+                {"reflact", "注销成功，账户已被删除"}
+            };
+        }
+    }
+
+    return true;
+}

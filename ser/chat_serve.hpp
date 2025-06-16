@@ -381,6 +381,20 @@ class serve{
                         break;
                     }
                 }
+                case(LOGOUT):{
+                    json *reflact = new json;
+                    handle_logout(json_quest,db,reflact,new_args->cfd_to_user);                                
+                    sendjson(*reflact,new_args->cfd);
+                    delete reflact;
+                    break;
+                }
+                case(BREAK):{
+                    json *reflact = new json;
+                    handle_break(json_quest,db,reflact);
+                    sendjson(*reflact,new_args->cfd);
+                    delete reflact;
+                    break;
+                }
             }
 
             delete[] rec_quest;

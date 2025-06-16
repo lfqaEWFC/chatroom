@@ -71,19 +71,26 @@ class client: public menu{
                         }
                         else if(start_choice == EXIT){
                             system("clear");
-                            cout << "感谢使用我的聊天室系统，再见!" << endl;
+                            cout << "感谢使用聊天室，再见!" << endl;
                             end_start_flag = true;
                             end_flag = true;
+                            sleep(1);
                         }
                         else if(start_choice == SIGNIN){
                             system("clear");
-                            json *signin;
+                            json *signin = new json;
                             handle_signin(signin);
                             sendjson(*signin,cfd);
+                            delete signin;
                             pthread_cond_wait(&recv_cond,&recv_lock);
                         }
                         else if(start_choice == BREAK){
-                            
+                            system("clear");
+                            json *json_break = new json;;
+                            handle_break(json_break);
+                            sendjson(*json_break,cfd);
+                            delete json_break;
+                            pthread_cond_wait(&recv_cond,&recv_lock);
                         }
                         else{
                             cout << "请输入正确的选项..." << endl;
@@ -112,7 +119,15 @@ class client: public menu{
 
                     switch(chat_choice){
                         case 1:{
-                            
+                            system("clear");
+                            json logout = {
+                                {"request",LOGOUT},
+                                {"username",username}
+                            }; 
+                            sendjson(logout,cfd);   
+                            end_chat_flag = true;
+                            end_start_flag = false;
+                            pthread_cond_wait(&recv_cond,&recv_lock);
                             break;
                         }
                         case 2:{
@@ -121,6 +136,9 @@ class client: public menu{
                         }
 
                     }
+
+                    system("clear");
+
                 }
             }
 
@@ -212,7 +230,15 @@ class client: public menu{
                                 }
                                 cout << recvjson["reflact"] << endl;
                             }
-                            else{}
+                            else if(recvjson["request"] == LOGOUT){
+                                cout << recvjson["reflact"] << endl;
+                            }
+                            else if(recvjson["request"] == BREAK){
+                                cout << recvjson["reflact"] << endl;
+                            }
+                            else{
+                                
+                            }
                             sleep(1);
                             pthread_cond_signal(new_args->recv_cond);
                             continue;

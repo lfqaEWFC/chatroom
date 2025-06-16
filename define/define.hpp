@@ -7,6 +7,7 @@
 #define FORGET_PASSWORD 5
 #define CHECK_ANS 6
 #define IN_ONLINE 7
+#define LOGOUT 8
 #define REFLACT 1000
 #define MESSAGE 2000
 #define ERROR 3000

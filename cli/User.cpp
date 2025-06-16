@@ -98,3 +98,22 @@ void handle_success_login(int cfd,string username){
 
     return;
 }
+
+bool handle_break(json *json_break){
+
+    string break_username;
+    string break_password;
+
+    cout << "请输入要注销的账号名称: " << endl;
+    cin >> break_username;
+    cout << "请输入帐号密码: " << endl;
+    cin >> break_password;
+
+    *json_break = {
+        {"request",BREAK},
+        {"username",break_username},
+        {"password",break_password}
+    };
+
+    return true;
+}

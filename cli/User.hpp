@@ -9,4 +9,5 @@ using namespace std;
 
 int handle_signin(json *signin);
 bool handle_login(json *login);
+bool handle_break(json *json_break);
 void handle_success_login(int cfd,string username);

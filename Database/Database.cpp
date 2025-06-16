@@ -87,3 +87,7 @@ bool database::redis_del_online_user(const string& username) {
     freeReplyObject(reply);
     return true;
 }
+
+MYSQL* database::get_mysql_conn() {
+    return mysql_conn;
+}
