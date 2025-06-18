@@ -331,7 +331,7 @@ class serve{
             switch(request){
                 case(LOGIN):{
                     json *reflact = new json;
-                    handle_login(json_quest,db,reflact);                
+                    handle_login(json_quest,db,reflact);             
                     sendjson(*reflact,new_args->cfd);
                     delete reflact;
                     break;
@@ -383,7 +383,7 @@ class serve{
                 }
                 case(LOGOUT):{
                     json *reflact = new json;
-                    handle_logout(json_quest,db,reflact,new_args->cfd_to_user);                                
+                    handle_logout(json_quest,db,reflact,new_args->cfd_to_user);                         
                     sendjson(*reflact,new_args->cfd);
                     delete reflact;
                     break;
@@ -392,6 +392,20 @@ class serve{
                     json *reflact = new json;
                     handle_break(json_quest,db,reflact);
                     sendjson(*reflact,new_args->cfd);
+                    delete reflact;
+                    break;
+                }
+                case(ADD_FRIEND):{
+                    json *reflact = new json;
+                    handle_add_friend(json_quest,new_args->cfd_to_user,db,reflact);
+                    sendjson(*reflact,new_args->cfd);
+                    delete reflact;
+                    break;
+                }
+                case(GET_OFFLINE_MSG):{
+                    json *reflact = new json;
+                    if(handle_get_offline(json_quest,db,reflact))
+                        sendjson(*reflact,new_args->cfd);
                     delete reflact;
                     break;
                 }

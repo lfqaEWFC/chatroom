@@ -117,3 +117,31 @@ bool handle_break(json *json_break){
 
     return true;
 }
+
+void handle_add_friend(json *json_friend,string username){
+
+    string friend_user;
+
+    cout << "请输入需要添加的好友名称: " << endl;
+    cin >> friend_user;
+
+    *json_friend = {
+        {"request",ADD_FRIEND},
+        {"username",username},
+        {"fri_username",friend_user},
+    };
+
+    return;
+}
+
+void handle_offline_login(int cfd,string username){
+ 
+    json send_json = {
+        {"request",GET_OFFLINE_MSG},
+        {"username",username}
+    };
+
+    sendjson(send_json,cfd);
+
+    return;
+}

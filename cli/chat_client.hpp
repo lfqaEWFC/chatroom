@@ -24,7 +24,7 @@ class client: public menu{
     public:
 
         client(int in_cfd):
-        end_start_flag(false),end_chat_flag(true),end_flag(false),sendlogin_flag(true),
+        end_start_flag(false),end_chat_flag(true),end_flag(false),handle_login_flag(true),
         chat_choice(0),start_choice(0),cfd(in_cfd){
 
             epfd = epoll_create(EPSIZE);
@@ -104,9 +104,10 @@ class client: public menu{
 
                 while(!end_chat_flag){
 
-                    if(sendlogin_flag){
+                    if(handle_login_flag){
                         handle_success_login(cfd,username);
-                        sendlogin_flag = false;
+                        handle_offline_login(cfd,username);
+                        handle_login_flag = false;
                     }
 
                     this->chat_show();
@@ -134,6 +135,15 @@ class client: public menu{
 
                             break;
                         }
+                        case 3:{
+                            system("clear");
+                            json *add_friend = new json;
+                            handle_add_friend(add_friend,username);
+                            sendjson(*add_friend,cfd);
+                            delete(add_friend);
+                            pthread_cond_wait(&recv_cond,&recv_lock);
+                            break;
+                        }
 
                     }
 
@@ -152,7 +162,7 @@ class client: public menu{
         int epfd;
         bool end_flag;
         bool end_start_flag;
-        bool sendlogin_flag;
+        bool handle_login_flag;
         bool end_chat_flag;
         string username;
         recv_args *args;
@@ -236,6 +246,9 @@ class client: public menu{
                             else if(recvjson["request"] == BREAK){
                                 cout << recvjson["reflact"] << endl;
                             }
+                            else if(recvjson["request"] == ADD_FRIEND){
+                                cout << recvjson["reflact"] << endl;
+                            }
                             else{
                                 
                             }
@@ -244,6 +257,12 @@ class client: public menu{
                             continue;
                         }
                         else if(recvjson["sort"] == MESSAGE){
+                            if(recvjson["request"] == ASK_ADD_FRIEND){
+                                cout << recvjson["message"] << endl;
+                            }
+                            else if(recvjson["request"] == GET_OFFLINE_MSG){
+                                //处理element逻辑
+                            }
                             continue;
                         }
                         else if(recvjson["sort"] == ERROR){

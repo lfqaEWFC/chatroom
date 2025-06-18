@@ -22,6 +22,7 @@ void menu::chat_show(){
     cout << "请输入选项" << endl;
     cout << "1.退出登录" << endl;
     cout << "2.私聊" << endl;
+    cout << "3.发送好友请求" << endl;
     cout << "后面的功能有待完善..." << endl;
 
     return;

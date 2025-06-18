@@ -8,6 +8,9 @@
 #define CHECK_ANS 6
 #define IN_ONLINE 7
 #define LOGOUT 8
+#define ADD_FRIEND 9
+#define ASK_ADD_FRIEND 10
+#define GET_OFFLINE_MSG 11
 #define REFLACT 1000
 #define MESSAGE 2000
 #define ERROR 3000

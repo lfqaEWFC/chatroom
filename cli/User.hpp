@@ -1,6 +1,8 @@
 #include <iostream>
 #include <nlohmann/json.hpp>
 #include <unordered_map>
+#include <ctime>
+#include <iomanip>
 #include "/home/mcy-mcy/文档/chatroom/define/define.hpp"
 #include "/home/mcy-mcy/文档/chatroom/include/inetsockets_tcp.hpp"
 
@@ -11,3 +13,5 @@ int handle_signin(json *signin);
 bool handle_login(json *login);
 bool handle_break(json *json_break);
 void handle_success_login(int cfd,string username);
+void handle_add_friend(json *json_friend,string username);
+void handle_offline_login(int cfd,string username);
