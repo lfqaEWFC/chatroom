@@ -15,3 +15,5 @@ bool handle_logout(json json_quest,unique_ptr<database> &db,json *reflact,unorde
 bool handle_break(json json_quest,unique_ptr<database> &db,json *reflact);
 bool handle_add_friend(json json_quest,unordered_map<int, string>* cfd_to_user,unique_ptr<database> &db,json *reflact);
 bool handle_get_offline(json json_quest,unique_ptr<database> &db,json *reflact);
+bool handle_get_friend(json json_quest,unique_ptr<database> &db,json *reflact);
+bool handle_deal_friend(json json_quest,unique_ptr<database> &db,json *reflact);

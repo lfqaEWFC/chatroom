@@ -15,3 +15,4 @@ bool handle_break(json *json_break);
 void handle_success_login(int cfd,string username);
 void handle_add_friend(json *json_friend,string username);
 void handle_offline_login(int cfd,string username);
+void handle_get_friend_req(json *get_friend_req,string username);

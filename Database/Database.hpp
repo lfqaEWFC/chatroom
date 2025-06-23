@@ -3,11 +3,14 @@
 
 #include <mysql/mysql.h>
 #include <hiredis/hiredis.h>
+#include <nlohmann/json.hpp>
+#include <string.h>
 #include <iostream>
 #include <string>
 #include <sstream> 
 
 using namespace std;
+using json = nlohmann::json;
 
 class database{
 
@@ -23,7 +26,8 @@ class database{
     MYSQL* get_mysql_conn();//获取mysql的连接句柄
 
     redisReply* execRedis(const string& command);
-    bool redis_del_online_user(const std::string& username);
+    bool lpushJson(const string& key, const json& json_data);
+    bool redis_del_online_user(const string& username);
     void free_reply(redisReply* reply);
     
     bool is_connected() const;

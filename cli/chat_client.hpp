@@ -102,11 +102,11 @@ class client: public menu{
 
                 }
 
-                while(!end_chat_flag){
-
-                    if(handle_login_flag){
-                        handle_success_login(cfd,username);
+                while(!end_chat_flag){      
+                    
+                    if(handle_login_flag && !end_chat_flag){
                         handle_offline_login(cfd,username);
+                        handle_success_login(cfd,username);
                         handle_login_flag = false;
                     }
 
@@ -118,37 +118,49 @@ class client: public menu{
                         continue;
                     }
 
-                    switch(chat_choice){
-                        case 1:{
-                            system("clear");
-                            json logout = {
-                                {"request",LOGOUT},
-                                {"username",username}
-                            }; 
-                            sendjson(logout,cfd);   
-                            end_chat_flag = true;
-                            end_start_flag = false;
-                            pthread_cond_wait(&recv_cond,&recv_lock);
-                            break;
-                        }
-                        case 2:{
+                    if(!end_chat_flag){
+                        switch(chat_choice){
+                            case 1:{
+                                system("clear");
+                                json logout = {
+                                    {"request",LOGOUT},
+                                    {"username",username}
+                                }; 
+                                sendjson(logout,cfd);   
+                                end_chat_flag = true;
+                                end_start_flag = false;
+                                handle_login_flag = true;
+                                pthread_cond_wait(&recv_cond,&recv_lock);
+                                break;
+                            }
+                            case 2:{
 
-                            break;
+                                break;
+                            }
+                            case 3:{
+                                system("clear");
+                                json *add_friend = new json;
+                                handle_add_friend(add_friend,username);
+                                sendjson(*add_friend,cfd);
+                                delete(add_friend);
+                                pthread_cond_wait(&recv_cond,&recv_lock);
+                                break;
+                            }
+                            case 4:{
+                                system("clear");
+                                json *get_fri_req = new json;
+                                handle_get_friend_req(get_fri_req,username);
+                                sendjson(*get_fri_req,cfd);
+                                delete(get_fri_req);
+                                pthread_cond_wait(&recv_cond,&recv_lock);
+                                break;
+                            }
+
                         }
-                        case 3:{
-                            system("clear");
-                            json *add_friend = new json;
-                            handle_add_friend(add_friend,username);
-                            sendjson(*add_friend,cfd);
-                            delete(add_friend);
-                            pthread_cond_wait(&recv_cond,&recv_lock);
-                            break;
-                        }
+
+                        system("clear");
 
                     }
-
-                    system("clear");
-
                 }
             }
 
@@ -249,6 +261,67 @@ class client: public menu{
                             else if(recvjson["request"] == ADD_FRIEND){
                                 cout << recvjson["reflact"] << endl;
                             }
+                            else if(recvjson["request"] == GET_FRIEND_REQ){
+                                if(recvjson["do_flag"] == false){
+                                    cout << recvjson["reflact"] << endl;
+                                }
+                                else{
+                                    bool add_flag = true;
+                                    string username = *new_args->username;
+                                    vector<string> fri_user = recvjson["fri_user"];
+                                    vector<string> requests = recvjson["reflact"];
+                                    vector<string> commit;
+                                    vector<string> refuse;
+                                    cout << "你有 " << requests.size() << " 条好友申请：" << endl;
+                                    for (size_t i = 0; i < requests.size(); ++i) {
+                                        cout << i + 1 << ". " << requests[i] << endl;
+                                    }
+                                    while(add_flag){
+                                        int num;
+                                        char chk;
+                                        cout << "请输入需要处理的好友申请的选项(输入-1退出交互): " << endl;
+                                        cin >> num;
+                                        if (num == 0) {
+                                            add_flag = false;
+                                            break;
+                                        }
+                                        if ((num < 1 || num > requests.size()) && num != -1) {
+                                            cout << "编号超出范围，请重新输入。" << endl;
+                                            continue;
+                                        }
+                                        if(num == -1){
+                                            add_flag = false;
+                                            break;
+                                        }                                    
+                                        cout << "请输入是否同意(y/n)" << endl;
+                                        cin >> chk;
+                                        if(chk == 'y'){
+                                            commit.push_back(fri_user[num-1]);
+                                        }else if(chk == 'n'){
+                                            refuse.push_back(fri_user[num-1]);
+                                        }else{
+                                            cout << "请勿输入无关选项..." << endl;
+                                        }
+                                    }
+                                    if(commit.size() == 0 && refuse.size() == 0){
+                                        cout << "未处理好友关系..." << endl;
+                                        sleep(1);
+                                        pthread_cond_signal(new_args->recv_cond);
+                                        continue;
+                                    }
+                                    json send_json = {
+                                        {"request",DEAL_FRI_REQ},
+                                        {"commit",commit},
+                                        {"refuse",refuse},
+                                        {"username",username}
+                                    };
+                                    sendjson(send_json,new_args->cfd);                                    
+                                    continue;
+                                }
+                            }
+                            else if(recvjson["request"] == DEAL_FRI_REQ){
+                                cout << recvjson["reflact"] << endl;
+                            }
                             else{
                                 
                             }
@@ -261,7 +334,15 @@ class client: public menu{
                                 cout << recvjson["message"] << endl;
                             }
                             else if(recvjson["request"] == GET_OFFLINE_MSG){
-                                //处理element逻辑
+                                json elements = json::array();
+                                elements = recvjson["elements"];
+                                int count = elements.size();
+                                if(count > 0){ 
+                                    cout << "以下是新消息: " << endl;
+                                    for(int i=0;i<count;i++){
+                                        cout << elements[i] << endl;
+                                    }
+                                }
                             }
                             continue;
                         }

@@ -145,3 +145,13 @@ void handle_offline_login(int cfd,string username){
 
     return;
 }
+
+void handle_get_friend_req(json *get_friend_req,string username){
+
+    *get_friend_req = {
+        {"request",GET_FRIEND_REQ},
+        {"username",username},
+    };
+
+    return;
+}

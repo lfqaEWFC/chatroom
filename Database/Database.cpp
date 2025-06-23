@@ -91,3 +91,30 @@ bool database::redis_del_online_user(const string& username) {
 MYSQL* database::get_mysql_conn() {
     return mysql_conn;
 }
+
+bool database::lpushJson(const string& key, const json& json_data){
+    if (!redis_conn) return false;
+
+    string json_str = json_data.dump();
+
+    const char* argv[3];
+    size_t argvlen[3];
+
+    argv[0] = "LPUSH";
+    argvlen[0] = strlen(argv[0]);
+
+    argv[1] = key.c_str();
+    argvlen[1] = key.size();
+
+    argv[2] = json_str.c_str();
+    argvlen[2] = json_str.size();
+
+    redisReply* reply = (redisReply*)redisCommandArgv(redis_conn, 3, argv, argvlen);
+    if (!reply) {
+        std::cerr << "Redis LPUSH failed: connection or command error" << std::endl;
+        return false;
+    }
+
+    freeReplyObject(reply);
+    return true;
+}

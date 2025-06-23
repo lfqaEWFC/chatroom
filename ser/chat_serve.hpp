@@ -233,6 +233,7 @@ class serve{
                             static thread_local unique_ptr<database> db = nullptr;
                             if(it != pthargs->cfd_to_user->end()){
                                 string username = it->second;
+                                cout << "delete cfd_to_uer" << endl;
                                 pthargs->cfd_to_user->erase(it);
                                 if (!db) {
                                     db = make_unique<database>("localhost", 0, "root", nullptr, "chat_database", "localhost", 6379);
@@ -359,6 +360,7 @@ class serve{
                         sendjson(send_json,new_args->cfd);
                         break;
                     }
+                    cout << "add cfd_to_user" << json_quest["username"] <<endl;
                     (*new_args->cfd_to_user)[new_args->cfd] = json_quest["username"];
                     break;
                 }
@@ -405,6 +407,20 @@ class serve{
                 case(GET_OFFLINE_MSG):{
                     json *reflact = new json;
                     if(handle_get_offline(json_quest,db,reflact))
+                        sendjson(*reflact,new_args->cfd);
+                    delete reflact;
+                    break;
+                }
+                case(GET_FRIEND_REQ):{
+                    json *reflact = new json;
+                    if(handle_get_friend(json_quest,db,reflact))
+                        sendjson(*reflact,new_args->cfd);
+                    delete reflact;
+                    break;
+                }
+                case(DEAL_FRI_REQ):{
+                    json *reflact = new json;
+                    if(handle_deal_friend(json_quest,db,reflact))
                         sendjson(*reflact,new_args->cfd);
                     delete reflact;
                     break;

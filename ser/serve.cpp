@@ -226,6 +226,7 @@ bool handle_logout(json json_quest, unique_ptr<database> &db, json *reflact, uno
         if (it->second == recv_username) {
             int cfd = it->first;
             db->redis_del_online_user(recv_username);
+            cout << "delete cfd_to_user" << endl;
             cfd_to_user->erase(it);
             *reflact = {
                 {"sort", REFLACT},
@@ -288,6 +289,14 @@ bool handle_add_friend(json json_quest,unordered_map<int, string>* cfd_to_user,u
 
     MYSQL_RES* res = db->query_sql("SHOW TABLES LIKE 'friendship'");
 
+    if(!res){
+        cout << "SHOW failed" << endl;
+        *reflact = {
+            {"sort",ERROR},
+            {"reflact","服务端好友关系表出错..."}
+        };
+        return false;
+    }
     if (res && mysql_num_rows(res) <= 0) {
         bool creatchk = db->execute_sql(
             "CREATE TABLE friendship("
@@ -306,6 +315,7 @@ bool handle_add_friend(json json_quest,unordered_map<int, string>* cfd_to_user,u
                 {"sort",ERROR},
                 {"reflact","创建好友关系表出错..."}
             };
+            db->free_result(res);
             return false;
         }        
     }
@@ -318,6 +328,8 @@ bool handle_add_friend(json json_quest,unordered_map<int, string>* cfd_to_user,u
             {"request",ADD_FRIEND},
             {"reflact","您要添加的用户不存在，请检查用户名是否正确"}
         };
+        db->free_result(res);
+        db->free_result(user_check);
         return false;
     }
 
@@ -327,20 +339,45 @@ bool handle_add_friend(json json_quest,unordered_map<int, string>* cfd_to_user,u
             {"request",ADD_FRIEND},
             {"reflact","不能添加自己为好友"}
         };
+        db->free_result(res);
+        db->free_result(user_check);
         return false;
     }
 
-    string check_friendship_sql = "SELECT * FROM friendship WHERE username = '" + username + "' AND friend_username = '" + fri_name + "'";
-    MYSQL_RES* rel_check = db->query_sql(check_friendship_sql);
-    if (rel_check && mysql_num_rows(rel_check) > 0) {
+    string check_friendship_sql0 = "SELECT * FROM friendship WHERE username = '" + username + "' AND friend_username = '" + fri_name + "'";
+    MYSQL_RES* rel0_check = db->query_sql(check_friendship_sql0);
+    int row0 = 0; 
+    if(rel0_check)
+        row0 = mysql_num_rows(rel0_check);
+    string check_friendship_sql1 = "SELECT * FROM friendship WHERE username = '" + fri_name + "' AND friend_username = '" + username + "'";
+    MYSQL_RES* rel1_check = db->query_sql(check_friendship_sql1);
+    int row1 = 0;
+    if(rel1_check)
+        row1 = mysql_num_rows(rel1_check);
+    if(!rel1_check || !rel0_check){
+        cout << "SELECT failed" << endl;
+        *reflact = {
+            {"sort",ERROR},
+            {"reflact","服务端好友关系表出错..."}
+        };
+        db->free_result(res);
+        db->free_result(user_check);
+        db->free_result(rel0_check);
+        db->free_result(rel1_check);
+        return false;
+    }        
+    if (row0 || row1) {
         *reflact = {
             {"sort",REFLACT},
             {"request",ADD_FRIEND},
-            {"reflact","好友申请已发送，请勿重复添加"}
+            {"reflact","好友申请已发送或已收到对方的好友申请，请勿重复添加"}
         };
+        db->free_result(res);
+        db->free_result(user_check);
+        db->free_result(rel0_check);
+        db->free_result(rel1_check);
         return false;
     }
-
 
     string sql = "INSERT INTO friendship(username, friend_username, status) VALUES('" +username + "','" + fri_name + "',0)";
     bool addchk = db->execute_sql(sql);
@@ -350,6 +387,10 @@ bool handle_add_friend(json json_quest,unordered_map<int, string>* cfd_to_user,u
             {"sort",ERROR},
             {"reflact","服务端好友关系表出错..."}
         };
+        db->free_result(res);
+        db->free_result(user_check);
+        db->free_result(rel0_check);
+        db->free_result(rel1_check);
         return false;
     }
 
@@ -361,9 +402,18 @@ bool handle_add_friend(json json_quest,unordered_map<int, string>* cfd_to_user,u
             send_fri = {
                 {"sort",MESSAGE},
                 {"request", ASK_ADD_FRIEND},
-                {"message", "'"+username+"'向您发送了好友申请，需要处理时请选择聊天界面好友申请选项"}
+                {"message", ""+username+" 向您发送了好友申请,需要处理时请选择聊天界面好友申请选项"}
             };
             sendjson(send_fri,cfd);
+            *reflact = {
+                {"sort",REFLACT},
+                {"request",ADD_FRIEND},
+                {"reflact","好友申请发送成功,等待处理中..."}
+            };
+            db->free_result(res);
+            db->free_result(user_check);
+            db->free_result(rel0_check);
+            db->free_result(rel1_check);
             return true;
         }
     }
@@ -372,19 +422,22 @@ bool handle_add_friend(json json_quest,unordered_map<int, string>* cfd_to_user,u
         json offline_msg = {
             {"type", "friend_request"},
             {"from", username},
-            {"message", "'" + username + "'向您发送了好友申请"}
+            {"message", ""+username+" 向您发送了好友申请,需要处理时请选择聊天界面好友申请选项"}
         };
 
-        string redis_value = offline_msg.dump();
-        string redis_cmd = "LPUSH offline:friend_req:" + fri_name + " '" + offline_msg.dump() + "'";
+        string redis_key = "offline:friend_req:" + fri_name;
+        bool redis_ok = db->lpushJson(redis_key,offline_msg);
 
-        bool redis_ok = db->execRedis(redis_cmd);
         if (!redis_ok) {
             cout << "Redis 离线消息写入失败" << endl;
             *reflact = {
                 {"sort",ERROR},
                 {"reflact","Redis 离线消息写入失败"}
             };
+            db->free_result(res);
+            db->free_result(user_check);
+            db->free_result(rel0_check);
+            db->free_result(rel1_check);
             return false;
         }
     }
@@ -395,20 +448,26 @@ bool handle_add_friend(json json_quest,unordered_map<int, string>* cfd_to_user,u
         {"reflact","好友申请发送成功,等待处理中..."}
     };
 
+    db->free_result(res);
+    db->free_result(user_check);
+    db->free_result(rel0_check);
+    db->free_result(rel1_check);
+
     return true;
 }
 
 bool handle_get_offline(json json_quest,unique_ptr<database> &db,json *reflact){
 
     const string user = json_quest["username"];
-    const string key  = "offline:friend_req:" + user;
+    const string fri_key  = "offline:friend_req:" + user;
 
-    redisReply *reply = db->execRedis("LRANGE "+key+" 0 -1");
+    redisReply *reply = db->execRedis("LRANGE "+fri_key+" 0 -1");
     if (!reply) {
         *reflact = {
-        {"sort", ERROR},
-        {"reflact", "服务端获取 Redis 回复失败"}
+            {"sort", ERROR},
+            {"reflact", "服务端获取 Redis 回复失败"}
         };
+        freeReplyObject(reply);
         return true;
     }
 
@@ -416,9 +475,10 @@ bool handle_get_offline(json json_quest,unique_ptr<database> &db,json *reflact){
         string err = reply->str;
         freeReplyObject(reply);
         *reflact = {
-        {"sort", ERROR},
-        {"reflact", "Redis 错误: " + err}
+            {"sort", ERROR},
+            {"reflact", "Redis 错误: " + err}
         };
+        freeReplyObject(reply);
         return true;
     }
 
@@ -438,7 +498,108 @@ bool handle_get_offline(json json_quest,unique_ptr<database> &db,json *reflact){
         {"elements", arr}
     };
 
+    redisReply* del_reply = db->execRedis("DEL "+fri_key+"");
+    if(del_reply == nullptr){
+        cerr << "Main Redis DB DEL "+fri_key+" Error" << endl;
+        freeReplyObject(reply);
+        freeReplyObject(del_reply);
+        return false;
+    }
+
     freeReplyObject(reply);
+    freeReplyObject(del_reply);
 
     return true;
+}
+
+bool handle_get_friend(json json_quest,unique_ptr<database> &db,json *reflact){
+    
+    const string user = json_quest["username"];
+
+    MYSQL_RES* res = db->query_sql("SELECT username FROM friendship WHERE friend_username = '"+user+"' AND status = 0");
+
+    if(res == nullptr){
+        *reflact = {
+            {"sort",ERROR},
+            {"reflact","好友关系相关信息出错"}
+        };
+        db->free_result(res);
+        return true;
+    }
+    else{
+        int rows = mysql_num_rows(res);
+        if(rows == 0){
+            *reflact = {
+                {"sort",REFLACT},
+                {"request",GET_FRIEND_REQ},
+                {"reflact","暂无需要处理的好友申请..."},
+                {"do_flag",false}
+            };
+            db->free_result(res);
+            return true;
+        }
+
+        vector<string>requests;
+        vector<string>fri_user;
+        MYSQL_ROW row;
+        while((row = mysql_fetch_row(res)) != nullptr){
+            fri_user.push_back(row[0]);
+            requests.push_back(row[0] + string(" 向您发送了好友请求"));
+        }
+        *reflact = {
+            {"sort",REFLACT},
+            {"request",GET_FRIEND_REQ},
+            {"do_flag",true},
+            {"reflact",requests},
+            {"username",user},
+            {"fri_user",fri_user}
+        };
+    }
+
+    return true;
+}
+
+bool handle_deal_friend(json json_quest,unique_ptr<database> &db,json *reflact){
+
+    vector<string> recv_commit = json_quest["commit"];
+    vector<string> recv_refuse = json_quest["refuse"];
+    string fri_user = json_quest["username"];
+    ssize_t c_size = recv_commit.size();
+    ssize_t r_size = recv_refuse.size();
+    bool c_chk = true;
+    bool r_chk = true; 
+
+    for(int i=0;i<c_size;i++){
+        string user = recv_commit[i];
+        c_chk = db->execute_sql("UPDATE friendship SET status = 1 WHERE username = '"+user+"' AND friend_username = '"+fri_user+"'");
+        if(c_chk == false) 
+            break;
+        c_chk = db->execute_sql("INSERT INTO friendship(username, friend_username, status) VALUES ('" +fri_user+ "','" +user+ "',1)");
+        if(c_chk == false) 
+            break;
+    }
+
+    for(int i=0;i<r_size;i++){
+        string user = recv_refuse[i];
+        r_chk = db->execute_sql("DELETE FROM friendship WHERE username = '"+user+"' AND friend_username = '"+fri_user+"'");
+        if(r_chk == false)
+            break;
+    }
+
+    if(r_chk == false || c_chk == false){
+        *reflact = {
+            {"sort",ERROR},
+            {"reflact","服务端处理好友关系出错..."}
+        };
+        return true;
+    }else{
+        *reflact = {
+            {"sort",REFLACT},
+            {"request",DEAL_FRI_REQ},
+            {"reflact","处理成功，请进行下一步操作..."}
+        };
+    }
+
+    return true;
+
 }
