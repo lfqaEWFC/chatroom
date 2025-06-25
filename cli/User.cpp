@@ -155,3 +155,21 @@ void handle_get_friend_req(json *get_friend_req,string username){
 
     return;
 }
+
+void handle_chat_name(json *chat_name,string username){
+    
+    string send_username = username;
+    string fri_user;
+    
+    cout << "请输入好友名称" << endl;
+    cin >> fri_user;
+
+    *chat_name = {
+        {"request",CHAT_NAME},
+        {"username",username},
+        {"fri_user",fri_user}
+    };
+
+    return;
+
+}

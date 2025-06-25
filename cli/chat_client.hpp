@@ -12,9 +12,14 @@ typedef struct recv_args{
     int cfd;
     int epfd;
     string *username;
+    string *fog_username;
     bool *end_flag;
     bool *end_start_flag;
+    bool *fog_que_flag;
+    bool *add_friend_req_flag;
     bool *end_chat_flag;
+    vector<string> *add_friend_fri_user;
+    vector<string> *add_friend_requests;
     pthread_cond_t *recv_cond;    
     pthread_mutex_t *recv_lock;
 }recv_args;
@@ -25,6 +30,7 @@ class client: public menu{
 
         client(int in_cfd):
         end_start_flag(false),end_chat_flag(true),end_flag(false),handle_login_flag(true),
+        fog_que_flag(false),add_friend_req_flag(false),
         chat_choice(0),start_choice(0),cfd(in_cfd){
 
             epfd = epoll_create(EPSIZE);
@@ -36,9 +42,14 @@ class client: public menu{
             args->cfd = cfd;
             args->epfd = epfd;
             args->end_flag = &end_flag;
-            args->end_start_flag = &end_start_flag;          
-            args->end_chat_flag = &end_chat_flag;
             args->username = &username;
+            args->fog_username = &fog_username;
+            args->fog_que_flag = &fog_que_flag;         
+            args->end_chat_flag = &end_chat_flag;
+            args->end_start_flag = &end_start_flag; 
+            args->add_friend_req_flag = &add_friend_req_flag;
+            args->add_friend_requests = &add_friend_requests;
+            args->add_friend_fri_user = &add_friend_fri_user;
             pthread_cond_init(&recv_cond,nullptr);
             pthread_mutex_init(&recv_lock,nullptr);
             args->recv_cond = &recv_cond;
@@ -68,6 +79,18 @@ class client: public menu{
                             sendjson(*login,cfd);
                             delete login;
                             pthread_cond_wait(&recv_cond,&recv_lock);
+                            if(fog_que_flag){
+                                cout << "请输入答案" << endl;
+                                char *in_ans = new char[64];
+                                cin >> in_ans;
+                                json send_json = {
+                                    {"request",CHECK_ANS},
+                                    {"username",fog_username},
+                                    {"answer",in_ans}
+                                };
+                                sendjson(send_json,cfd);
+                                pthread_cond_wait(&recv_cond,&recv_lock);
+                            }
                         }
                         else if(start_choice == EXIT){
                             system("clear");
@@ -134,15 +157,19 @@ class client: public menu{
                                 break;
                             }
                             case 2:{
-
+                                system("clear");
+                                json *chat_name = new json;
+                                handle_chat_name(chat_name,username);
+                                sendjson(*chat_name,cfd);
+                                delete(chat_name);
+                                pthread_cond_wait(&recv_cond,&recv_lock);
                                 break;
                             }
                             case 3:{
                                 system("clear");
                                 json *add_friend = new json;
                                 handle_add_friend(add_friend,username);
-                                sendjson(*add_friend,cfd);
-                                delete(add_friend);
+                                sendjson(*add_friend,cfd);                              
                                 pthread_cond_wait(&recv_cond,&recv_lock);
                                 break;
                             }
@@ -153,6 +180,52 @@ class client: public menu{
                                 sendjson(*get_fri_req,cfd);
                                 delete(get_fri_req);
                                 pthread_cond_wait(&recv_cond,&recv_lock);
+                                if(add_friend_req_flag){
+                                    bool add_flag = true;
+                                    vector<string> commit;
+                                    vector<string> refuse;
+                                    while(add_flag){
+                                        int num;
+                                        char chk;
+                                        cout << "请输入需要处理的好友申请的选项(输入-1退出交互): " << endl;
+                                        cin >> num;
+                                        if (num == 0) {
+                                            add_flag = false;
+                                            break;
+                                        }
+                                        if ((num < 1 || num > add_friend_requests.size()) && num != -1) {
+                                            cout << "编号超出范围，请重新输入。" << endl;
+                                            continue;
+                                        }
+                                        if(num == -1){
+                                            add_flag = false;
+                                            break;
+                                        }                                    
+                                        cout << "请输入是否同意(y/n)" << endl;
+                                        cin >> chk;
+                                        if(chk == 'y'){
+                                            commit.push_back(add_friend_fri_user[num-1]);
+                                        }else if(chk == 'n'){
+                                            refuse.push_back(add_friend_fri_user[num-1]);
+                                        }else{
+                                            cout << "请勿输入无关选项..." << endl;
+                                        }
+                                    }
+                                    if(commit.size() == 0 && refuse.size() == 0){
+                                        cout << "未处理好友关系..." << endl;
+                                        sleep(1);
+                                        system("clear");
+                                        continue;
+                                    }
+                                    json send_json = {
+                                        {"request",DEAL_FRI_REQ},
+                                        {"commit",commit},
+                                        {"refuse",refuse},
+                                        {"username",username}
+                                    };
+                                    sendjson(send_json,cfd);  
+                                    pthread_cond_wait(&recv_cond,&recv_lock);
+                                }
                                 break;
                             }
 
@@ -173,29 +246,35 @@ class client: public menu{
         int cfd;
         int epfd;
         bool end_flag;
-        bool end_start_flag;
-        bool handle_login_flag;
+        bool fog_que_flag;
         bool end_chat_flag;
+        bool end_start_flag;
+        bool handle_login_flag;  
+        bool add_friend_req_flag;
         string username;
+        string fog_username;
         recv_args *args;
         int start_choice;
         int chat_choice;
         struct epoll_event ev;
+        vector<string> add_friend_fri_user;
+        vector<string> add_friend_requests;
         pthread_t recv_pthread;
         pthread_cond_t recv_cond;
         pthread_mutex_t recv_lock;
 
         static void* recv_thread(void *args){
 
+            string buffer;
+            char recvbuf[MAXBUF] = {0};
             recv_args *new_args = (recv_args*)args;
             struct epoll_event evlist[1];
-            char *recvbuf = new char[MAXBUF];
-
+                       
             while(true){
 
                 int n = epoll_wait(new_args->epfd,evlist,1,-1);
                 for(int i=0;i < n;i++){
-                    if(evlist[0].events & (EPOLLHUP | EPOLLERR | EPOLLRDHUP)){
+                    if(evlist[i].events & (EPOLLHUP | EPOLLERR | EPOLLRDHUP)){
                         cout << "服务器已关闭，即将退出程序...." << endl;
                         *new_args->end_flag = true;
                         *new_args->end_chat_flag = true;
@@ -203,161 +282,138 @@ class client: public menu{
                         pthread_cond_signal(new_args->recv_cond);
                         return nullptr;
                     }
-                    else if(evlist[0].events & EPOLLIN){
-                        int n;
-                        while((n = recv(new_args->cfd,recvbuf,MAXBUF,MSG_DONTWAIT)) != 0){
-                            if(n == -1){
-                                if(errno != EAGAIN && errno != EWOULDBLOCK){
-                                    perror("recv");
-                                    return nullptr;
-                                }else break;               
-                            } 
+                    else if(evlist[i].events & EPOLLIN){
+                        ssize_t n;
+                        while((n = recv(new_args->cfd,recvbuf,MAXBUF,MSG_DONTWAIT)) > 0){
+                            buffer.append(recvbuf, n);
                         }
-                        json recvjson = nlohmann::json::parse(recvbuf);
-                        if(recvjson["sort"] == REFLACT){
-                            if(recvjson["request"] == SIGNIN){
-                                cout << recvjson["reflact"] << endl;
+                        if(n == -1){
+                            if(errno != EAGAIN && errno != EWOULDBLOCK){
+                                perror("recv");
+                                return nullptr;
+                            }              
+                        }  
+
+                        while (buffer.size() >= 4){                         
+                            uint32_t net_len;                           
+                            memcpy(&net_len, buffer.data(), 4);
+                            uint32_t msg_len = ntohl(net_len);
+                            if(msg_len == 0 || msg_len > MAX_REASONABLE_SIZE) {
+                                cerr << "异常消息长度: " << msg_len << endl;
+                                buffer.clear();
+                                break;
                             }
-                            else if(recvjson["request"] == LOGIN){
-                                if(recvjson["login_flag"]){
-                                    *new_args->end_start_flag = true;
-                                    *new_args->end_chat_flag = false;
-                                    *new_args->username = recvjson["username"];
-                                }
-                                cout << recvjson["reflact"] << endl;
+                            if (buffer.size() < 4 + msg_len) break;
+                            string json_str = buffer.substr(4, msg_len);
+                            buffer.erase(0, 4 + msg_len);
+                            
+                            json recvjson;
+                            try{
+                                recvjson = json::parse(json_str);
+                            }catch(...){
+                                cerr << "JSON parse error\n";
+                                continue;
                             }
-                            else if(recvjson["request"] == FORGET_PASSWORD){
-                                if(recvjson["que_flag"]){
-                                    char *in_ans = new char[64];
-                                    cout << "密保问题: " << recvjson["reflact"] << endl;
-                                    cout << "请输入答案" << endl;
-                                    cin >> in_ans;
-                                    json send_json = {
-                                        {"request",CHECK_ANS},
-                                        {"username",recvjson["username"]},
-                                        {"answer",in_ans}
-                                    };
-                                    sendjson(send_json,new_args->cfd);
-                                    continue;
-                                }
-                                else{
+                            if(recvjson["sort"] == REFLACT){
+                                if(recvjson["request"] == SIGNIN){
                                     cout << recvjson["reflact"] << endl;
                                 }
-                            }
-                            else if(recvjson["request"] == CHECK_ANS){
-                                if(recvjson["ans_flag"]){
-                                    *new_args->end_start_flag = true;
-                                    *new_args->end_chat_flag = false;
-                                    *new_args->username = recvjson["username"];
+                                else if(recvjson["request"] == LOGIN){
+                                    if(recvjson["login_flag"]){
+                                        *new_args->end_start_flag = true;
+                                        *new_args->end_chat_flag = false;
+                                        *new_args->username = recvjson["username"];
+                                    }
+                                    cout << recvjson["reflact"] << endl;
                                 }
-                                cout << recvjson["reflact"] << endl;
-                            }
-                            else if(recvjson["request"] == LOGOUT){
-                                cout << recvjson["reflact"] << endl;
-                            }
-                            else if(recvjson["request"] == BREAK){
-                                cout << recvjson["reflact"] << endl;
-                            }
-                            else if(recvjson["request"] == ADD_FRIEND){
-                                cout << recvjson["reflact"] << endl;
-                            }
-                            else if(recvjson["request"] == GET_FRIEND_REQ){
-                                if(recvjson["do_flag"] == false){
+                                else if(recvjson["request"] == FORGET_PASSWORD){
+                                    if(recvjson["que_flag"]){
+                                        *new_args->fog_que_flag = true;
+                                        *new_args->fog_username = recvjson["username"];
+                                        cout << "密保问题: " << recvjson["reflact"] << endl;
+                                    }
+                                    else
+                                        cout << recvjson["reflact"] << endl;
+                                }
+                                else if(recvjson["request"] == CHECK_ANS){
+                                    if(recvjson["ans_flag"]){
+                                        *new_args->end_start_flag = true;
+                                        *new_args->end_chat_flag = false;
+                                        *new_args->username = recvjson["username"];
+                                    }
+                                    cout << recvjson["reflact"] << endl;
+                                }
+                                else if(recvjson["request"] == LOGOUT){
+                                    cout << recvjson["reflact"] << endl;
+                                }
+                                else if(recvjson["request"] == BREAK){
+                                    cout << recvjson["reflact"] << endl;
+                                }
+                                else if(recvjson["request"] == ADD_FRIEND){
+                                    cout << recvjson["reflact"] << endl;
+                                }
+                                else if(recvjson["request"] == GET_FRIEND_REQ){
+                                    if(recvjson["do_flag"] == false){
+                                        cout << recvjson["reflact"] << endl;
+                                    }
+                                    else{
+                                        *new_args->add_friend_req_flag = true;
+                                        *new_args->add_friend_fri_user = recvjson["fri_user"];
+                                        *new_args->add_friend_requests = recvjson["reflact"];
+                                        cout << "你有 " << (*new_args->add_friend_requests).size() 
+                                            << " 条好友申请：" << endl;
+                                        for (size_t i = 0; i < (*new_args->add_friend_requests).size(); ++i) {
+                                            cout << i + 1 << ". " << (*new_args->add_friend_requests)[i] << endl;
+                                        }
+                                    }
+                                }
+                                else if(recvjson["request"] == DEAL_FRI_REQ){
                                     cout << recvjson["reflact"] << endl;
                                 }
                                 else{
-                                    bool add_flag = true;
-                                    string username = *new_args->username;
-                                    vector<string> fri_user = recvjson["fri_user"];
-                                    vector<string> requests = recvjson["reflact"];
-                                    vector<string> commit;
-                                    vector<string> refuse;
-                                    cout << "你有 " << requests.size() << " 条好友申请：" << endl;
-                                    for (size_t i = 0; i < requests.size(); ++i) {
-                                        cout << i + 1 << ". " << requests[i] << endl;
-                                    }
-                                    while(add_flag){
-                                        int num;
-                                        char chk;
-                                        cout << "请输入需要处理的好友申请的选项(输入-1退出交互): " << endl;
-                                        cin >> num;
-                                        if (num == 0) {
-                                            add_flag = false;
-                                            break;
-                                        }
-                                        if ((num < 1 || num > requests.size()) && num != -1) {
-                                            cout << "编号超出范围，请重新输入。" << endl;
-                                            continue;
-                                        }
-                                        if(num == -1){
-                                            add_flag = false;
-                                            break;
-                                        }                                    
-                                        cout << "请输入是否同意(y/n)" << endl;
-                                        cin >> chk;
-                                        if(chk == 'y'){
-                                            commit.push_back(fri_user[num-1]);
-                                        }else if(chk == 'n'){
-                                            refuse.push_back(fri_user[num-1]);
-                                        }else{
-                                            cout << "请勿输入无关选项..." << endl;
-                                        }
-                                    }
-                                    if(commit.size() == 0 && refuse.size() == 0){
-                                        cout << "未处理好友关系..." << endl;
+                                    
+                                }
+
+                                if(recvjson["request"] != GET_FRIEND_REQ && recvjson["request"] != FORGET_PASSWORD)
+                                    sleep(1);
+                                if(recvjson["request"] == GET_FRIEND_REQ){
+                                    if(recvjson["do_flag"] == false)
                                         sleep(1);
-                                        pthread_cond_signal(new_args->recv_cond);
-                                        continue;
-                                    }
-                                    json send_json = {
-                                        {"request",DEAL_FRI_REQ},
-                                        {"commit",commit},
-                                        {"refuse",refuse},
-                                        {"username",username}
-                                    };
-                                    sendjson(send_json,new_args->cfd);                                    
-                                    continue;
                                 }
+                                pthread_cond_signal(new_args->recv_cond);
+                                
+                                continue;
                             }
-                            else if(recvjson["request"] == DEAL_FRI_REQ){
-                                cout << recvjson["reflact"] << endl;
+                            else if(recvjson["sort"] == MESSAGE){
+                                if(recvjson["request"] == ASK_ADD_FRIEND){
+                                    cout << recvjson["message"] << endl;
+                                }
+                                else if(recvjson["request"] == GET_OFFLINE_MSG){
+                                    json elements = json::array();
+                                    elements = recvjson["elements"];
+                                    int count = elements.size();
+                                    if(count > 0){ 
+                                        cout << "以下是新消息: " << endl;
+                                        for(int i=0;i<count;i++){
+                                            cout << elements[i] << endl;
+                                        }
+                                    }
+                                }
+                                continue;
+                            }
+                            else if(recvjson["sort"] == ERROR){
+                                cout << "发生错误 : " << recvjson["reflact"] << endl;
+                                *new_args->end_flag = true;
+                                *new_args->end_start_flag = true;
+                                *new_args->end_chat_flag = true;
+                                sleep(1);
+                                pthread_cond_signal(new_args->recv_cond);
                             }
                             else{
-                                
+                                cout << "接受信息类型错误" << endl;
+                                *new_args->end_start_flag = true;
+                                return nullptr;
                             }
-                            sleep(1);
-                            pthread_cond_signal(new_args->recv_cond);
-                            continue;
-                        }
-                        else if(recvjson["sort"] == MESSAGE){
-                            if(recvjson["request"] == ASK_ADD_FRIEND){
-                                cout << recvjson["message"] << endl;
-                            }
-                            else if(recvjson["request"] == GET_OFFLINE_MSG){
-                                json elements = json::array();
-                                elements = recvjson["elements"];
-                                int count = elements.size();
-                                if(count > 0){ 
-                                    cout << "以下是新消息: " << endl;
-                                    for(int i=0;i<count;i++){
-                                        cout << elements[i] << endl;
-                                    }
-                                }
-                            }
-                            continue;
-                        }
-                        else if(recvjson["sort"] == ERROR){
-                            cout << "发生错误 : " << recvjson["reflact"] << endl;
-                            *new_args->end_flag = true;
-                            *new_args->end_start_flag = true;
-                            *new_args->end_chat_flag = true;
-                            sleep(1);
-                            pthread_cond_signal(new_args->recv_cond);
-                        }
-                        else{
-                            cout << "接受信息类型错误" << endl;
-                            *new_args->end_start_flag = true;
-                            return nullptr;
                         }
                     }
                 }

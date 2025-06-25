@@ -151,10 +151,24 @@ bool sendjson(json sendjson,int cfd){
 
     string json_str = sendjson.dump();
     const char* data = json_str.c_str(); 
-    size_t data_len = json_str.size();
-    if(send(cfd,data,data_len,0) == -1){
-        perror("send");
-        return false;
+    uint32_t data_len = json_str.size();
+
+    uint32_t net_len = htonl(data_len);
+
+    string send_buf;
+    send_buf.append(reinterpret_cast<char*>(&net_len), sizeof(net_len));
+    send_buf.append(json_str);
+
+    size_t total_sent = 0;
+    size_t to_send = send_buf.size();
+     
+    while (total_sent < to_send) {
+        ssize_t sent = send(cfd, send_buf.c_str() + total_sent, to_send - total_sent, 0);
+        if (sent == -1) {
+            perror("send");
+            return false;
+        }
+        total_sent += sent;
     }
 
     return true;

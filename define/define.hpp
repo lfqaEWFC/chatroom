@@ -13,6 +13,8 @@
 #define GET_OFFLINE_MSG 11
 #define GET_FRIEND_REQ 12
 #define DEAL_FRI_REQ 13
+#define CHAT_NAME 14
+#define MAX_REASONABLE_SIZE 8192
 #define REFLACT 1000
 #define MESSAGE 2000
 #define ERROR 3000
