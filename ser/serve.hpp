@@ -11,7 +11,7 @@ bool handle_login(json json_quest,unique_ptr<database> &db,json *reflact);
 bool handle_forget_password(json json_quest,unique_ptr<database> &db,json *reflact);
 bool handle_check_answer(json json_quest,unique_ptr<database> &db,json *reflact);
 bool handle_in_online(json json_quest,unique_ptr<database> &db);
-bool handle_logout(json json_quest,unique_ptr<database> &db,json *reflact,unordered_map<int, string>* cfd_to_user,unordered_map<int, string>* cfd_to_buffer);
+bool handle_logout(json json_quest,unique_ptr<database> &db,json *reflact,unordered_map<int, string>* cfd_to_user);
 bool handle_break(json json_quest,unique_ptr<database> &db,json *reflact);
 bool handle_add_friend(json json_quest,unordered_map<int, string>* cfd_to_user,unique_ptr<database> &db,json *reflact);
 bool handle_get_offline(json json_quest,unique_ptr<database> &db,json *reflact);

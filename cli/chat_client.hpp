@@ -16,6 +16,7 @@ typedef struct recv_args{
     bool *end_flag;
     bool *end_start_flag;
     bool *fog_que_flag;
+    bool *chat_name_flag;
     bool *add_friend_req_flag;
     bool *end_chat_flag;
     vector<string> *add_friend_fri_user;
@@ -30,7 +31,7 @@ class client: public menu{
 
         client(int in_cfd):
         end_start_flag(false),end_chat_flag(true),end_flag(false),handle_login_flag(true),
-        fog_que_flag(false),add_friend_req_flag(false),
+        fog_que_flag(false),add_friend_req_flag(false),chat_name_flag(false),
         chat_choice(0),start_choice(0),cfd(in_cfd){
 
             epfd = epoll_create(EPSIZE);
@@ -44,7 +45,8 @@ class client: public menu{
             args->end_flag = &end_flag;
             args->username = &username;
             args->fog_username = &fog_username;
-            args->fog_que_flag = &fog_que_flag;         
+            args->fog_que_flag = &fog_que_flag;
+            args->chat_name_flag = &chat_name_flag;         
             args->end_chat_flag = &end_chat_flag;
             args->end_start_flag = &end_start_flag; 
             args->add_friend_req_flag = &add_friend_req_flag;
@@ -90,7 +92,8 @@ class client: public menu{
                                 };
                                 sendjson(send_json,cfd);
                                 pthread_cond_wait(&recv_cond,&recv_lock);
-                            }
+                                wait_user_continue();
+                            }else wait_user_continue();
                         }
                         else if(start_choice == EXIT){
                             system("clear");
@@ -106,6 +109,7 @@ class client: public menu{
                             sendjson(*signin,cfd);
                             delete signin;
                             pthread_cond_wait(&recv_cond,&recv_lock);
+                            wait_user_continue();
                         }
                         else if(start_choice == BREAK){
                             system("clear");
@@ -114,6 +118,7 @@ class client: public menu{
                             sendjson(*json_break,cfd);
                             delete json_break;
                             pthread_cond_wait(&recv_cond,&recv_lock);
+                            wait_user_continue();
                         }
                         else{
                             cout << "请输入正确的选项..." << endl;
@@ -154,6 +159,7 @@ class client: public menu{
                                 end_start_flag = false;
                                 handle_login_flag = true;
                                 pthread_cond_wait(&recv_cond,&recv_lock);
+                                wait_user_continue();
                                 break;
                             }
                             case 2:{
@@ -163,6 +169,9 @@ class client: public menu{
                                 sendjson(*chat_name,cfd);
                                 delete(chat_name);
                                 pthread_cond_wait(&recv_cond,&recv_lock);
+                                if(chat_name_flag){
+                                    ;
+                                }else wait_user_continue();
                                 break;
                             }
                             case 3:{
@@ -171,6 +180,7 @@ class client: public menu{
                                 handle_add_friend(add_friend,username);
                                 sendjson(*add_friend,cfd);                              
                                 pthread_cond_wait(&recv_cond,&recv_lock);
+                                wait_user_continue();
                                 break;
                             }
                             case 4:{
@@ -225,7 +235,9 @@ class client: public menu{
                                     };
                                     sendjson(send_json,cfd);  
                                     pthread_cond_wait(&recv_cond,&recv_lock);
-                                }
+                                    wait_user_continue();
+                                }else wait_user_continue();
+                                
                                 break;
                             }
 
@@ -248,6 +260,7 @@ class client: public menu{
         bool end_flag;
         bool fog_que_flag;
         bool end_chat_flag;
+        bool chat_name_flag;
         bool end_start_flag;
         bool handle_login_flag;  
         bool add_friend_req_flag;
@@ -271,7 +284,7 @@ class client: public menu{
             struct epoll_event evlist[1];
                        
             while(true){
-
+                
                 int n = epoll_wait(new_args->epfd,evlist,1,-1);
                 for(int i=0;i < n;i++){
                     if(evlist[i].events & (EPOLLHUP | EPOLLERR | EPOLLRDHUP)){
@@ -294,7 +307,8 @@ class client: public menu{
                             }              
                         }  
 
-                        while (buffer.size() >= 4){                         
+                        while (buffer.size() >= 4){
+
                             uint32_t net_len;                           
                             memcpy(&net_len, buffer.data(), 4);
                             uint32_t msg_len = ntohl(net_len);
@@ -370,16 +384,18 @@ class client: public menu{
                                 else if(recvjson["request"] == DEAL_FRI_REQ){
                                     cout << recvjson["reflact"] << endl;
                                 }
+                                else if(recvjson["request"] == CHAT_NAME){
+                                    if(recvjson["chat_flag"] == false)
+                                        cout << recvjson["reflact"] << endl;
+                                    else{
+                                        cout << recvjson["reflact"] << endl;
+                                        *new_args->chat_name_flag = true;
+                                    }
+                                }
                                 else{
                                     
                                 }
 
-                                if(recvjson["request"] != GET_FRIEND_REQ && recvjson["request"] != FORGET_PASSWORD)
-                                    sleep(1);
-                                if(recvjson["request"] == GET_FRIEND_REQ){
-                                    if(recvjson["do_flag"] == false)
-                                        sleep(1);
-                                }
                                 pthread_cond_signal(new_args->recv_cond);
                                 
                                 continue;
@@ -406,7 +422,6 @@ class client: public menu{
                                 *new_args->end_flag = true;
                                 *new_args->end_start_flag = true;
                                 *new_args->end_chat_flag = true;
-                                sleep(1);
                                 pthread_cond_signal(new_args->recv_cond);
                             }
                             else{

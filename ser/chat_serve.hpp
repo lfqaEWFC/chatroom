@@ -405,7 +405,6 @@ class serve{
                         }
                         cout << "add cfd_to_user" << json_quest["username"] <<endl;
                         (*new_args->cfd_to_user)[new_args->cfd] = json_quest["username"];
-                        (*new_args->cfd_to_buffer)[new_args->cfd] = "";
                         break;
                     }
                     case(SIGNIN):{
@@ -429,7 +428,7 @@ class serve{
                     }
                     case(LOGOUT):{
                         json *reflact = new json;
-                        handle_logout(json_quest,db,reflact,new_args->cfd_to_user,new_args->cfd_to_buffer);                         
+                        handle_logout(json_quest,db,reflact,new_args->cfd_to_user);                         
                         sendjson(*reflact,new_args->cfd);
                         delete reflact;
                         break;
@@ -479,8 +478,6 @@ class serve{
                         break;
                     }
                 }
-                
-                if(request == LOGOUT) break;
             }
 
             delete[] rec_quest;

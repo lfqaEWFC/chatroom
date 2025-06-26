@@ -20,3 +20,4 @@ int inetconnect(char *service,const char *portnum);
 char* address_str_portnum(char *result,ssize_t max_resultlen,sockaddr *addr,socklen_t addrlen);
 int set_nonblocking(int fd);
 bool sendjson(json sendjson,int cfd);
+void wait_user_continue();

@@ -218,7 +218,7 @@ bool handle_in_online(json json_quest,unique_ptr<database> &db){
     return true;
 }
 
-bool handle_logout(json json_quest, unique_ptr<database> &db, json *reflact, unordered_map<int, string>* cfd_to_user,unordered_map<int, string>* cfd_to_buffer) {
+bool handle_logout(json json_quest, unique_ptr<database> &db, json *reflact, unordered_map<int, string>* cfd_to_user) {
     
     string recv_username = json_quest["username"];
 
@@ -228,12 +228,6 @@ bool handle_logout(json json_quest, unique_ptr<database> &db, json *reflact, uno
             db->redis_del_online_user(recv_username);
             cout << "delete cfd_to_user" << endl;
             cfd_to_user->erase(it);
-
-            auto buf_it = cfd_to_buffer->find(cfd);
-            if (buf_it != cfd_to_buffer->end()) {
-                cout << "delete cfd_to_buffer" << endl;
-                cfd_to_buffer->erase(buf_it);
-            }
 
             *reflact = {
                 {"sort", REFLACT},
@@ -616,16 +610,34 @@ bool handle_chat_name(json json_quest,unique_ptr<database> &db,json *reflact,uno
     string fri_user = json_quest["fri_user"];
     string username = json_quest["username"];
 
-    MYSQL_RES *res = db->query_sql("SELECT * FROM friendship WHERE username = '"+username+"' AND friend_username = '"+fri_user+"'");
+    MYSQL_RES *res = db->query_sql("SELECT * FROM user WHERE username = '"+fri_user+"'");
+    if(res == nullptr){
+        *reflact = {
+            {"sort",ERROR},
+            {"reflact","服务端查询用户表出错..."}
+        };
+        return true;
+    }
+    ssize_t rows = mysql_num_rows(res);
+    if(rows == 0){
+        *reflact = {
+            {"sort",REFLACT},
+            {"request",CHAT_NAME},
+            {"chat_flag",false},
+            {"reflact","输入错误，该用户不存在..."}
+        };
+    }
 
+
+    res = db->query_sql("SELECT * FROM friendship WHERE username = '"+username+"' AND friend_username = '"+fri_user+"' AND status = 1");
     if(res == nullptr){
         *reflact = {
             {"sort",ERROR},
             {"reflact","服务端验证好友关系出错..."}
         };
+        return true;
     }
-
-    ssize_t rows = mysql_num_rows(res);
+    rows = mysql_num_rows(res);
     if(rows == 0){
         *reflact = {
             {"sort",REFLACT},
@@ -633,8 +645,16 @@ bool handle_chat_name(json json_quest,unique_ptr<database> &db,json *reflact,uno
             {"chat_flag",false},
             {"reflact","您还尚未与该用户建立好友关系..."}
         };
+        return true;
     }else{
-        
+        (*user_to_friend)[username] = fri_user;
+        *reflact = {
+            {"sort",REFLACT},
+            {"request",CHAT_NAME},
+            {"chat_flag",true},
+            {"reflact","**********"+fri_user+"**********"}
+        };
+        return true;
     }
 
     return true;
