@@ -16,6 +16,7 @@ typedef struct recv_args{
     bool *end_flag;
     bool *end_start_flag;
     bool *fog_que_flag;
+    bool *pri_chat_flag;
     bool *chat_name_flag;
     bool *add_friend_req_flag;
     bool *end_chat_flag;
@@ -31,7 +32,7 @@ class client: public menu{
 
         client(int in_cfd):
         end_start_flag(false),end_chat_flag(true),end_flag(false),handle_login_flag(true),
-        fog_que_flag(false),add_friend_req_flag(false),chat_name_flag(false),
+        fog_que_flag(false),add_friend_req_flag(false),chat_name_flag(false),pri_chat_flag(false),
         chat_choice(0),start_choice(0),cfd(in_cfd){
 
             epfd = epoll_create(EPSIZE);
@@ -46,6 +47,7 @@ class client: public menu{
             args->username = &username;
             args->fog_username = &fog_username;
             args->fog_que_flag = &fog_que_flag;
+            args->pri_chat_flag = &pri_chat_flag;
             args->chat_name_flag = &chat_name_flag;         
             args->end_chat_flag = &end_chat_flag;
             args->end_start_flag = &end_start_flag; 
@@ -64,12 +66,14 @@ class client: public menu{
             while(!end_flag){
 
                 while(!end_start_flag){
-
+                    
                     this->start_show();
+               
                     if (!(cin >> start_choice)) {
                         cout << "请输入数字选项..." << endl;
                         cin.clear();
-                        cin.ignore(numeric_limits<streamsize>::max(), '\n');
+                        wait_user_continue();
+                        system("clear");
                         continue;
                     }
 
@@ -81,7 +85,7 @@ class client: public menu{
                             sendjson(*login,cfd);
                             delete login;
                             pthread_cond_wait(&recv_cond,&recv_lock);
-                            if(fog_que_flag){
+                            if(fog_que_flag && !end_flag){
                                 cout << "请输入答案" << endl;
                                 char *in_ans = new char[64];
                                 cin >> in_ans;
@@ -122,6 +126,8 @@ class client: public menu{
                         }
                         else{
                             cout << "请输入正确的选项..." << endl;
+                            wait_user_continue();
+                            system("clear");
                             continue;
                         }
                     }
@@ -142,7 +148,8 @@ class client: public menu{
                     if (!(cin >> chat_choice)) {
                         cout << "请输入数字选项..." << endl;
                         cin.clear();
-                        cin.ignore(numeric_limits<streamsize>::max(), '\n');
+                        wait_user_continue();
+                        system("clear");
                         continue;
                     }
 
@@ -166,11 +173,19 @@ class client: public menu{
                                 system("clear");
                                 json *chat_name = new json;
                                 handle_chat_name(chat_name,username);
+                                string fri_user = (*chat_name)["fri_user"];
                                 sendjson(*chat_name,cfd);
-                                delete(chat_name);
+                                delete chat_name;
                                 pthread_cond_wait(&recv_cond,&recv_lock);
-                                if(chat_name_flag){
-                                    ;
+                                if(chat_name_flag && !end_flag){
+                                    json offline_pri;
+                                    handle_history_pri(&offline_pri,username);    
+                                    sendjson(offline_pri,cfd);
+                                    pthread_cond_wait(&recv_cond,&recv_lock);
+                                    if(pri_chat_flag && !end_flag)
+                                        handle_pri_chat(username,fri_user,cfd);
+                                    cout << "=============================================" << endl;
+                                    wait_user_continue();                               
                                 }else wait_user_continue();
                                 break;
                             }
@@ -190,7 +205,7 @@ class client: public menu{
                                 sendjson(*get_fri_req,cfd);
                                 delete(get_fri_req);
                                 pthread_cond_wait(&recv_cond,&recv_lock);
-                                if(add_friend_req_flag){
+                                if(add_friend_req_flag && !end_flag){
                                     bool add_flag = true;
                                     vector<string> commit;
                                     vector<string> refuse;
@@ -237,10 +252,14 @@ class client: public menu{
                                     pthread_cond_wait(&recv_cond,&recv_lock);
                                     wait_user_continue();
                                 }else wait_user_continue();
-                                
                                 break;
                             }
-
+                            default:{
+                                cout << "请输入正确的选项..." << endl;
+                                wait_user_continue();
+                                system("clear");
+                                continue;
+                            }
                         }
 
                         system("clear");
@@ -262,6 +281,7 @@ class client: public menu{
         bool end_chat_flag;
         bool chat_name_flag;
         bool end_start_flag;
+        bool pri_chat_flag;
         bool handle_login_flag;  
         bool add_friend_req_flag;
         string username;
@@ -283,7 +303,7 @@ class client: public menu{
             recv_args *new_args = (recv_args*)args;
             struct epoll_event evlist[1];
                        
-            while(true){
+            while(true && !(*new_args->end_flag)){
                 
                 int n = epoll_wait(new_args->epfd,evlist,1,-1);
                 for(int i=0;i < n;i++){
@@ -392,6 +412,20 @@ class client: public menu{
                                         *new_args->chat_name_flag = true;
                                     }
                                 }
+                                else if(recvjson["request"] == GET_HISTORY_PRI){
+                                    if(recvjson["ht_flag"] == false){
+                                        cout << recvjson["reflact"] << '\n' << endl;
+                                    }else{
+                                        json history = recvjson["reflact"];
+                                        for (auto& msg : history) {
+                                            string sender = msg["sender"];
+                                            string content = msg["content"];
+                                            string timestamp = msg["timestamp"];
+                                            cout << "[" << timestamp << "] " << sender << ": " << content << endl;
+                                        }
+                                    }
+                                    *new_args->pri_chat_flag = true;
+                                }
                                 else{
                                     
                                 }
@@ -423,10 +457,14 @@ class client: public menu{
                                 *new_args->end_start_flag = true;
                                 *new_args->end_chat_flag = true;
                                 pthread_cond_signal(new_args->recv_cond);
+                                return nullptr;
                             }
                             else{
                                 cout << "接受信息类型错误" << endl;
+                                *new_args->end_flag = true;
                                 *new_args->end_start_flag = true;
+                                *new_args->end_chat_flag = true;
+                                pthread_cond_signal(new_args->recv_cond);
                                 return nullptr;
                             }
                         }
@@ -435,6 +473,8 @@ class client: public menu{
 
                 memset(recvbuf,0,MAXBUF);
             }
+            
+            return nullptr;
         }
 
 };

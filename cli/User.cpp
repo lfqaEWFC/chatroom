@@ -171,5 +171,47 @@ void handle_chat_name(json *chat_name,string username){
     };
 
     return;
+}
 
+void handle_history_pri(json *offline_pri,string username){
+
+    *offline_pri= {
+        {"username",username},
+        {"request",GET_HISTORY_PRI}
+    };
+
+    return;
+}
+
+void handle_pri_chat(string username,string fri_user,int cfd){
+
+    cout << "进入私聊模式，对方：" << fri_user << endl;
+    cout << "提示：\n"
+        << "- 输入普通消息将直接发送。\n"
+        << "- 输入 /file 可发送文件。\n"
+        << "- 输入 /exit 可退出私聊。\n" << endl;;
+
+    while(true){
+        string message;
+        
+        cout << "[" << username << " -> " << fri_user << "]: ";
+        cin.ignore(numeric_limits<streamsize>::max(), '\n');
+        getline(cin,message);
+        
+        if(message == "/file"){
+        }
+        else if(message == "/exit") break;            
+        else{
+            json msg = {
+                {"request", PRIVATE_CHAT},
+                {"from", username},
+                {"to", fri_user},
+                {"file_flag",false},
+                {"message", message}
+            };
+            sendjson(msg, cfd);
+        }
+    }
+
+    return;
 }

@@ -610,6 +610,16 @@ bool handle_chat_name(json json_quest,unique_ptr<database> &db,json *reflact,uno
     string fri_user = json_quest["fri_user"];
     string username = json_quest["username"];
 
+    if(fri_user == username){
+        *reflact = {
+            {"sort",REFLACT},
+            {"request",CHAT_NAME},
+            {"chat_flag",false},
+            {"reflact","你不能和自己聊天..."}
+        };
+        return true;
+    }
+
     MYSQL_RES *res = db->query_sql("SELECT * FROM user WHERE username = '"+fri_user+"'");
     if(res == nullptr){
         *reflact = {
@@ -652,9 +662,98 @@ bool handle_chat_name(json json_quest,unique_ptr<database> &db,json *reflact,uno
             {"sort",REFLACT},
             {"request",CHAT_NAME},
             {"chat_flag",true},
-            {"reflact","**********"+fri_user+"**********"}
+            {"pri_username",fri_user},
+            {"reflact","============================================="}
         };
         return true;
+    }
+
+    return true;
+}
+
+bool handle_history_pri(json json_quest, unique_ptr<database> &db, json *reflact, unordered_map<string, string> user_to_friend){
+    
+    string username = json_quest["username"];
+    string fri_user = user_to_friend["username"];
+    
+    MYSQL_RES *res = db->query_sql("SHOW TABLES LIKE 'private_message'");
+    if(res == nullptr){
+        cout << "SHOW failed" << endl;
+        *reflact = {
+            {"sort",ERROR},
+            {"reflact","MYSQL SHOW ERROR..."}
+        };
+        return true; 
+    }
+
+    if(mysql_num_rows(res)<=0){
+        bool creatchk = db->execute_sql(
+            "CREATE TABLE private_message("
+            "id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '消息唯一 ID',"
+            "sender VARCHAR(64) NOT NULL COMMENT '发送方用户名',"
+            "receiver VARCHAR(64) NOT NULL COMMENT '接收方用户名',"
+            "content TEXT COMMENT '消息内容',"
+            "timestamp DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '发送时间'"
+            ");"
+        );
+        if(creatchk == false){
+            cout << "CREAT ERROR" << endl;
+            *reflact = {
+                {"sort",ERROR},
+                {"reflact","MYSQL CREAT ERROR"}
+            };
+            return true;
+        }
+    }
+
+    res = db->query_sql(
+        "SELECT * FROM ("
+            "SELECT * FROM private_message "
+            "WHERE (sender = '"+username+"' AND receiver = '"+fri_user+"') "
+               "OR (sender = '"+fri_user+"' AND receiver = '"+username+"') "
+            "ORDER BY timestamp DESC "
+            "LIMIT 50 "
+        ")AS recent_message "
+        "ORDER BY timestamp ASC;"
+    );
+    if(res == nullptr){
+        cout << "SELECT ERROR" << endl;
+        *reflact = {
+            {"sort",ERROR},
+            {"reflact","MYSQL SELECT ERROR"}
+        };
+        return true;
+    }
+
+    if(mysql_num_rows(res) == 0){
+
+        *reflact = {
+            {"sort",REFLACT},
+            {"request",GET_HISTORY_PRI},
+            {"ht_flag",false},
+            {"reflact","暂无历史消息..."} 
+        };
+
+    }else{
+        json history_msgs = json::array();
+        MYSQL_ROW row;
+
+        while ((row = mysql_fetch_row(res)) != nullptr) {
+            json msg;
+            msg["id"] = row[0];
+            msg["sender"] = row[1];
+            msg["receiver"] = row[2];
+            msg["content"] = row[3];
+            msg["timestamp"] = row[4];
+            history_msgs.push_back(msg);
+        }
+
+        *reflact = {
+            {"sort",REFLACT},
+            {"request",GET_HISTORY_PRI},
+            {"ht_flag",true},
+            {"reflact",history_msgs}
+        };
     }
 
     return true;

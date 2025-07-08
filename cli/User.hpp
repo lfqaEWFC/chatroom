@@ -17,3 +17,5 @@ void handle_add_friend(json *json_friend,string username);
 void handle_offline_login(int cfd,string username);
 void handle_get_friend_req(json *get_friend_req,string usernamevoid );
 void handle_chat_name(json *get_friend_req,string usernamevoid);
+void handle_history_pri(json *offline_pri,string username);
+void handle_pri_chat(string username,string fri_user,int cfd);

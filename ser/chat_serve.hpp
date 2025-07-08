@@ -477,6 +477,13 @@ class serve{
                         delete reflact;
                         break;
                     }
+                    case(GET_HISTORY_PRI):{
+                        json *reflact = new json;
+                        if(handle_history_pri(json_quest,db,reflact,*new_args->user_to_friend))
+                            sendjson(*reflact,new_args->cfd);
+                        delete reflact;
+                        break;    
+                    }
                 }
             }
 
