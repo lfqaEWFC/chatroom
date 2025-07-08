@@ -484,6 +484,9 @@ class serve{
                         delete reflact;
                         break;    
                     }
+                    case(PRIVATE_CHAT):{
+
+                    }
                 }
             }
 

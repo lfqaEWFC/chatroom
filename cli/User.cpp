@@ -183,35 +183,44 @@ void handle_history_pri(json *offline_pri,string username){
     return;
 }
 
-void handle_pri_chat(string username,string fri_user,int cfd){
+void handle_pri_chat(string username,string fri_user,int cfd){ 
+
+    bool d_flag = true;
 
     cout << "进入私聊模式，对方：" << fri_user << endl;
     cout << "提示：\n"
         << "- 输入普通消息将直接发送。\n"
         << "- 输入 /file 可发送文件。\n"
-        << "- 输入 /exit 可退出私聊。\n" << endl;;
+        << "- 输入 /exit 可退出私聊。\n";
 
-    while(true){
-        string message;
-        
-        cout << "[" << username << " -> " << fri_user << "]: ";
-        cin.ignore(numeric_limits<streamsize>::max(), '\n');
-        getline(cin,message);
-        
-        if(message == "/file"){
-        }
-        else if(message == "/exit") break;            
-        else{
-            json msg = {
-                {"request", PRIVATE_CHAT},
-                {"from", username},
-                {"to", fri_user},
-                {"file_flag",false},
-                {"message", message}
-            };
-            sendjson(msg, cfd);
-        }
-    }
+        while (true){
+           
+            char input[MAX_REASONABLE_SIZE];
 
+            if(!d_flag)               
+                cout << "[" << username << " -> " << fri_user << "]: ";
+            d_flag = false;            
+            fgets(input,MAX_REASONABLE_SIZE,stdin);
+            input[strcspn(input, "\n")] = '\0';
+            string message = string(input);
+        
+            if (message == "/file") {
+                // 调用发送文件逻辑
+            }
+            else if (message == "/exit") {
+                break;
+            }
+            else {
+                json msg = {
+                    {"request", PRIVATE_CHAT},
+                    {"from", username},
+                    {"to", fri_user},
+                    {"file_flag", false},
+                    {"message", message}
+                };
+                sendjson(msg, cfd);
+            }
+        }
+        
     return;
 }

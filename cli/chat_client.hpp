@@ -185,7 +185,11 @@ class client: public menu{
                                     if(pri_chat_flag && !end_flag)
                                         handle_pri_chat(username,fri_user,cfd);
                                     cout << "=============================================" << endl;
-                                    wait_user_continue();                               
+                                    if(pri_chat_flag && !end_flag){
+                                        cout << "请按回车继续..." << endl;
+                                        cin.get();
+                                    }
+                                    else wait_user_continue();                                                                  
                                 }else wait_user_continue();
                                 break;
                             }

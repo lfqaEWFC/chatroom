@@ -176,6 +176,6 @@ bool sendjson(json sendjson,int cfd){
 
 void wait_user_continue(){
     cout << "请按回车继续..." << endl;
-    cin.ignore(numeric_limits<streamsize>::max(), '\n');
+    cin.ignore(numeric_limits<streamsize>::max(), '\n'); 
     cin.get();
 }
