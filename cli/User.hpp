@@ -3,6 +3,8 @@
 #include <unordered_map>
 #include <ctime>
 #include <iomanip>
+#include <readline/readline.h>
+#include <readline/history.h>
 #include "/home/mcy-mcy/文档/chatroom/define/define.hpp"
 #include "/home/mcy-mcy/文档/chatroom/include/inetsockets_tcp.hpp"
 

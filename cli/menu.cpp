@@ -25,6 +25,7 @@ void menu::chat_show(){
     cout << "3.发送好友请求" << endl;
     cout << "4.查看好友请求" << endl;
     cout << "5.接受文件" << endl;
+    cout << "6.加入黑名单" << endl;
     cout << "后面的功能有待完善..." << endl;
 
     return;

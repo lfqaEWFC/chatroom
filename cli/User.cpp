@@ -184,9 +184,7 @@ void handle_history_pri(json *offline_pri,string username){
 }
 
 void handle_pri_chat(string username,string fri_user,int cfd,bool* end_flag){ 
-
-    bool d_flag = true;
-
+    
     cout << "进入私聊模式，对方：" << fri_user << endl;
     cout << "提示：\n"
         << "- 输入普通消息将直接发送。\n"
@@ -195,12 +193,11 @@ void handle_pri_chat(string username,string fri_user,int cfd,bool* end_flag){
 
         while (true && !(*end_flag)){
            
-            char input[MAX_REASONABLE_SIZE];
-
-            if(!d_flag)               
-                cout << "[\"" << username << "\"->\"" << fri_user << "\"]: ";                       
-            fgets(input,MAX_REASONABLE_SIZE,stdin);
-            input[strcspn(input, "\n")] = '\0';
+            char show[MAX_REASONABLE_SIZE];
+      
+            sprintf(show,"[\"%s\"->\"%s\"]: ",username.c_str(),fri_user.c_str());        
+            char *input = readline(show);
+            if (!input) break;                   
             string message = string(input);
         
             if (message == "/file") {
@@ -215,18 +212,15 @@ void handle_pri_chat(string username,string fri_user,int cfd,bool* end_flag){
                 break;
             }
             else {
-                if(!d_flag){
-                    json msg = {
-                        {"request", PRIVATE_CHAT},
-                        {"from", username},
-                        {"to", fri_user},
-                        {"file_flag", false},
-                        {"message", message}
-                    };
-                    sendjson(msg, cfd);
-                }
+                json msg = {
+                    {"request", PRIVATE_CHAT},
+                    {"from", username},
+                    {"to", fri_user},
+                    {"file_flag", false},
+                    {"message", message}
+                };
+                sendjson(msg, cfd);
             }
-            d_flag = false; 
         }
         
     return;

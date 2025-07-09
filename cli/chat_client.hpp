@@ -3,6 +3,8 @@
 #include "/home/mcy-mcy/文档/chatroom/define/define.hpp"
 #include "/home/mcy-mcy/文档/chatroom/include/Threadpool.hpp"
 #include <sys/epoll.h>
+#include <readline/readline.h>
+#include <readline/history.h>
 #include "User.hpp"
 #include <nlohmann/json.hpp>
 
@@ -184,13 +186,8 @@ class client: public menu{
                                     pthread_cond_wait(&recv_cond,&recv_lock);
                                     if(pri_chat_flag && !end_flag)
                                         handle_pri_chat(username,fri_user,cfd,&end_flag);
-                                    cout << "=============================================" << endl;
-                                    if(pri_chat_flag && !end_flag){
-                                        cout << "请按回车继续..." << endl;
-                                        cin.get();
-                                        pri_chat_flag = false;
-                                    }
-                                    else wait_user_continue();
+                                    cout << "=============================================" << endl;                                 
+                                    wait_user_continue();
                                     chat_name_flag = false;                                                                  
                                 }else wait_user_continue();
                                 break;
@@ -259,6 +256,9 @@ class client: public menu{
                                     wait_user_continue();
                                 }else wait_user_continue();
                                 break;
+                            }
+                            case 6:{
+                                
                             }
                             default:{
                                 cout << "请输入正确的选项..." << endl;
@@ -443,7 +443,7 @@ class client: public menu{
                             }
                             else if(recvjson["sort"] == MESSAGE){
                                 if(recvjson["request"] == ASK_ADD_FRIEND){
-                                    cout << '\n' << recvjson["message"] << endl;
+                                    cout << recvjson["message"] << endl;
                                 }
                                 else if(recvjson["request"] == GET_OFFLINE_MSG){
                                     json elements = json::array();
@@ -457,12 +457,17 @@ class client: public menu{
                                     }
                                 }
                                 else if(recvjson["request"] == PEER_CHAT){
-                                    cout << "\n[" << recvjson["sender"] << "->" << recvjson["receiver"] << "]: ";
+                                    rl_crlf();
+                                    cout << "[" << recvjson["sender"] << "->" << recvjson["receiver"] << "]: ";
                                     cout << recvjson["message"] << endl;
+                                    rl_on_new_line();
+                                    rl_redisplay();
                                 }
                                 else if(recvjson["request"] == NON_PEER_CHAT){
-                                    cout << '\n';
+                                    rl_crlf();
                                     cout << recvjson["message"] << endl;
+                                    rl_on_new_line();
+                                    rl_redisplay();
                                 }
                                 continue;
                             }

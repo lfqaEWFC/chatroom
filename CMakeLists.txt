@@ -32,6 +32,9 @@ target_link_libraries(server
     ${MYSQL_LIBRARIES}
 )
 
+target_link_libraries(client readline)
+target_link_libraries(server readline)
+
 target_include_directories(server PUBLIC
     ${MYSQL_INCLUDE_DIRS}
 )
