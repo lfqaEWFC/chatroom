@@ -78,7 +78,7 @@ bool handle_forget_password(json json_quest,unique_ptr<database> &db,json *refla
     return false;
 }
 
-bool handle_login(json json_quest,unique_ptr<database> &db,json *reflact){
+bool handle_login(json json_quest,unique_ptr<database> &db,json *reflact,unordered_map<int, string> *cfd_to_user){
 
     string recv_username = json_quest["username"];
     string recv_password = json_quest["password"];
@@ -106,6 +106,19 @@ bool handle_login(json json_quest,unique_ptr<database> &db,json *reflact){
             return false;
         }else{
             string user_password = row[0];
+            auto it = cfd_to_user->begin();
+            for(;it != cfd_to_user->end();it++){
+                if(it->second == recv_username){
+                    *reflact = {
+                        {"sort",REFLACT},
+                        {"request",LOGIN},
+                        {"login_flag",false},
+                        {"reflact","已有终端的登录，请勿重复登录..."}
+                    };
+                    db->free_result(res);
+                    return false;
+                }
+            }
             if(user_password == recv_password){
                 *reflact = {
                     {"sort",REFLACT},
@@ -459,8 +472,10 @@ bool handle_add_friend(json json_quest,unordered_map<int, string>* cfd_to_user,u
 
 bool handle_get_offline(json json_quest,unique_ptr<database> &db,json *reflact){
 
+    json arr = json::array();
     const string user = json_quest["username"];
-    const string fri_key  = "offline:friend_req:" + user;
+    const string fri_key = "offline:friend_req:" + user;
+    const string pri_key = "offline:private:" + user;
 
     redisReply *reply = db->execRedis("LRANGE "+fri_key+" 0 -1");
     if (!reply) {
@@ -474,7 +489,6 @@ bool handle_get_offline(json json_quest,unique_ptr<database> &db,json *reflact){
 
     if (reply->type == REDIS_REPLY_ERROR) {
         string err = reply->str;
-        freeReplyObject(reply);
         *reflact = {
             {"sort", ERROR},
             {"reflact", "Redis 错误: " + err}
@@ -483,12 +497,30 @@ bool handle_get_offline(json json_quest,unique_ptr<database> &db,json *reflact){
         return true;
     }
 
-    json arr = json::array();
-
     if (reply->type == REDIS_REPLY_ARRAY) {
         for (size_t i = 0; i < reply->elements; ++i) {
             json req = json::parse(reply->element[i]->str);
             arr.push_back(req["message"]);
+        }
+    }
+
+    freeReplyObject(reply);
+    reply = db->execRedis("HGETALL "+pri_key+"");
+    if (reply->type == REDIS_REPLY_ERROR) {
+        string err = reply->str;
+        *reflact = {
+            {"sort", ERROR},
+            {"reflact", "Redis 错误: " + err}
+        };
+        freeReplyObject(reply);
+        return true;
+    }
+    if (reply && reply->type == REDIS_REPLY_ARRAY) {
+        for (size_t i = 0; i < reply->elements; i += 2) {
+            string sender = reply->element[i]->str;
+            string count = reply->element[i + 1]->str;
+            string line = "好友 [" + sender + "] 有 " + count + " 条未读私聊消息";
+            arr.push_back(line);
         }
     }
 
@@ -500,7 +532,8 @@ bool handle_get_offline(json json_quest,unique_ptr<database> &db,json *reflact){
     };
 
     redisReply* del_reply = db->execRedis("DEL "+fri_key+"");
-    if(del_reply == nullptr){
+    redisReply* del_pri = db->execRedis("DEL "+pri_key+"");
+    if((del_reply == nullptr) || (del_pri == nullptr)){
         cerr << "Main Redis DB DEL "+fri_key+" Error" << endl;
         freeReplyObject(reply);
         freeReplyObject(del_reply);
@@ -674,7 +707,7 @@ bool handle_chat_name(json json_quest,unique_ptr<database> &db,json *reflact,uno
 bool handle_history_pri(json json_quest, unique_ptr<database> &db, json *reflact, unordered_map<string, string> user_to_friend){
     
     string username = json_quest["username"];
-    string fri_user = user_to_friend["username"];
+    string fri_user = user_to_friend[username];
     
     MYSQL_RES *res = db->query_sql("SHOW TABLES LIKE 'private_message'");
     if(res == nullptr){
@@ -755,6 +788,107 @@ bool handle_history_pri(json json_quest, unique_ptr<database> &db, json *reflact
             {"reflact",history_msgs}
         };
     }
+
+    return true;
+}
+
+bool handle_private_chat(json json_quest,unique_ptr<database> &db,json *reflact, 
+    unordered_map<string, string> user_to_friend,unordered_map<int, string> cfd_to_user)
+{
+    string sender = json_quest["from"];
+    string receiver = json_quest["to"];
+    string message = json_quest["message"];
+    bool file_flag = json_quest["file_flag"];
+
+    if(file_flag){
+
+    }
+    else{
+        bool sql_chk = db->execute_sql("INSERT INTO private_message(sender, receiver, content) VALUES('" +sender+ "','" +receiver+ "','"+message+"')");
+        if(sql_chk == false){
+            cout << "INSERT failed" << endl;
+            *reflact = {
+                {"sort",ERROR}, 
+                {"reflact","MYSQL INSERT ERROR"}
+            };
+            return true;
+        }
+
+        auto it = cfd_to_user.begin();
+        for (; it != cfd_to_user.end(); ++it) {
+            if (it->second == receiver) {
+                int cfd = it->first;
+                if(user_to_friend[receiver] == sender){                   
+                    json send_msg = {
+                        {"sort",MESSAGE},
+                        {"request",PEER_CHAT},
+                        {"sender",sender},
+                        {"receiver",receiver},
+                        {"message",message}
+                    };
+                    sendjson(send_msg,cfd);
+                    return false;
+                }
+                else{
+                    json send_msg = {
+                        {"sort",MESSAGE},
+                        {"request",NON_PEER_CHAT},
+                        {"message","通知: 好友"+sender+"向您发送了一条新消息"}
+                    };
+                    sendjson(send_msg,cfd);
+                    return false;
+                }
+            }
+        }
+        if(it == cfd_to_user.end()){
+            bool redis_chk = true;
+            string redis_key = "offline:private:" + receiver;
+            redisReply *reply = db->execRedis("HEXISTS "+redis_key+" "+sender+"");
+            if(reply == nullptr) redis_chk = false;
+            else if(reply->type == REDIS_REPLY_INTEGER){
+                if(reply->integer == 1){
+                    freeReplyObject(reply);
+                    cout << "increasing..." << endl;
+                    reply = db->execRedis("HINCRBY "+redis_key+" "+sender+" 1");
+                    if(reply == nullptr) redis_chk = false;
+                }
+                else{
+                    freeReplyObject(reply);
+                    cout << "setting..." << endl;
+                    reply = db->execRedis("HSET "+redis_key+" "+sender+" 1");
+                    if(reply == nullptr) redis_chk = false;
+                }
+            }
+            else{
+                freeReplyObject(reply);
+                cout << "redis reply type is wrong" << endl;
+                *reflact = {
+                    {"sort",ERROR}, 
+                    {"reflact","redis reply type is wrong"}
+                };
+                return true;
+            }
+            if(!redis_chk){
+                freeReplyObject(reply);
+                cout << "redis hash wrong" << endl;
+                *reflact = {
+                    {"sort",ERROR}, 
+                    {"reflact","redis hash wrong"}
+                };
+                return true;
+            }
+            if (reply) freeReplyObject(reply);
+        }
+    }
+
+    return false;
+}
+
+bool handle_del_peer(json json_quest,unique_ptr<database>&db,unordered_map<string, string> *user_to_friend){
+    string sender = json_quest["from"];
+    string receiver = json_quest["to"];
+
+    (*user_to_friend).erase((*user_to_friend)[sender]);
 
     return true;
 }

@@ -375,7 +375,7 @@ class serve{
                 switch(request){
                     case(LOGIN):{
                         json *reflact = new json;
-                        handle_login(json_quest,db,reflact);             
+                        handle_login(json_quest,db,reflact,new_args->cfd_to_user);             
                         sendjson(*reflact,new_args->cfd);
                         delete reflact;
                         break;
@@ -485,7 +485,17 @@ class serve{
                         break;    
                     }
                     case(PRIVATE_CHAT):{
-
+                        json *reflact = new json;
+                        if(handle_private_chat(json_quest,db,reflact,*new_args->user_to_friend,*new_args->cfd_to_user))
+                            sendjson(*reflact,new_args->cfd);
+                        delete reflact;
+                        break;
+                    }
+                    case(DEL_PEER):{
+                        json *reflact = new json;
+                        handle_del_peer(json_quest,db,new_args->user_to_friend);
+                        delete reflact;
+                        break;
                     }
                 }
             }

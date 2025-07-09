@@ -7,7 +7,7 @@
 using json = nlohmann::json;
 
 bool handle_signin(json json_quest, unique_ptr<database> &db);
-bool handle_login(json json_quest, unique_ptr<database> &db, json *reflact);
+bool handle_login(json json_quest, unique_ptr<database> &db, json *reflact,unordered_map<int, string> *cfd_to_user);
 bool handle_forget_password(json json_quest, unique_ptr<database> &db, json *reflact);
 bool handle_check_answer(json json_quest, unique_ptr<database> &db, json *reflact);
 bool handle_in_online(json json_quest, unique_ptr<database> &db);
@@ -19,3 +19,6 @@ bool handle_get_friend(json json_quest, unique_ptr<database> &db, json *reflact)
 bool handle_deal_friend(json json_quest, unique_ptr<database> &db, json *reflact);
 bool handle_chat_name(json json_quest, unique_ptr<database> &db, json *reflact, unordered_map<string, string> *user_to_friend);
 bool handle_history_pri(json json_quest, unique_ptr<database> &db, json *reflact, unordered_map<string, string> user_to_friend);
+bool handle_private_chat(json json_quest,unique_ptr<database> &db,json *reflact, 
+                         unordered_map<string, string> user_to_friend,unordered_map<int, string> cfd_to_user);
+bool handle_del_peer(json json_quest,unique_ptr<database>&db,unordered_map<string, string> *user_to_friend);

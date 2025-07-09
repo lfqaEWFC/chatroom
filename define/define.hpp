@@ -16,6 +16,9 @@
 #define CHAT_NAME 14
 #define GET_HISTORY_PRI 15
 #define PRIVATE_CHAT 16
+#define PEER_CHAT 17
+#define NON_PEER_CHAT 18
+#define DEL_PEER 19
 #define MAX_REASONABLE_SIZE 8192
 #define REFLACT 1000
 #define MESSAGE 2000

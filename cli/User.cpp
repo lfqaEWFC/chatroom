@@ -183,7 +183,7 @@ void handle_history_pri(json *offline_pri,string username){
     return;
 }
 
-void handle_pri_chat(string username,string fri_user,int cfd){ 
+void handle_pri_chat(string username,string fri_user,int cfd,bool* end_flag){ 
 
     bool d_flag = true;
 
@@ -191,15 +191,14 @@ void handle_pri_chat(string username,string fri_user,int cfd){
     cout << "提示：\n"
         << "- 输入普通消息将直接发送。\n"
         << "- 输入 /file 可发送文件。\n"
-        << "- 输入 /exit 可退出私聊。\n";
+        << "- 输入 /exit 可退出私聊。\n" << endl;
 
-        while (true){
+        while (true && !(*end_flag)){
            
             char input[MAX_REASONABLE_SIZE];
 
             if(!d_flag)               
-                cout << "[" << username << " -> " << fri_user << "]: ";
-            d_flag = false;            
+                cout << "[\"" << username << "\"->\"" << fri_user << "\"]: ";                       
             fgets(input,MAX_REASONABLE_SIZE,stdin);
             input[strcspn(input, "\n")] = '\0';
             string message = string(input);
@@ -208,18 +207,26 @@ void handle_pri_chat(string username,string fri_user,int cfd){
                 // 调用发送文件逻辑
             }
             else if (message == "/exit") {
+                json end = {
+                    {"request",DEL_PEER},
+                    {"from",username},
+                    {"to",fri_user}
+                };
                 break;
             }
             else {
-                json msg = {
-                    {"request", PRIVATE_CHAT},
-                    {"from", username},
-                    {"to", fri_user},
-                    {"file_flag", false},
-                    {"message", message}
-                };
-                sendjson(msg, cfd);
+                if(!d_flag){
+                    json msg = {
+                        {"request", PRIVATE_CHAT},
+                        {"from", username},
+                        {"to", fri_user},
+                        {"file_flag", false},
+                        {"message", message}
+                    };
+                    sendjson(msg, cfd);
+                }
             }
+            d_flag = false; 
         }
         
     return;

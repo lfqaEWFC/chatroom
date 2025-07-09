@@ -183,13 +183,15 @@ class client: public menu{
                                     sendjson(offline_pri,cfd);
                                     pthread_cond_wait(&recv_cond,&recv_lock);
                                     if(pri_chat_flag && !end_flag)
-                                        handle_pri_chat(username,fri_user,cfd);
+                                        handle_pri_chat(username,fri_user,cfd,&end_flag);
                                     cout << "=============================================" << endl;
                                     if(pri_chat_flag && !end_flag){
                                         cout << "请按回车继续..." << endl;
                                         cin.get();
+                                        pri_chat_flag = false;
                                     }
-                                    else wait_user_continue();                                                                  
+                                    else wait_user_continue();
+                                    chat_name_flag = false;                                                                  
                                 }else wait_user_continue();
                                 break;
                             }
@@ -427,6 +429,7 @@ class client: public menu{
                                             string timestamp = msg["timestamp"];
                                             cout << "[" << timestamp << "] " << sender << ": " << content << endl;
                                         }
+                                        cout << '\n';
                                     }
                                     *new_args->pri_chat_flag = true;
                                 }
@@ -440,7 +443,7 @@ class client: public menu{
                             }
                             else if(recvjson["sort"] == MESSAGE){
                                 if(recvjson["request"] == ASK_ADD_FRIEND){
-                                    cout << recvjson["message"] << endl;
+                                    cout << '\n' << recvjson["message"] << endl;
                                 }
                                 else if(recvjson["request"] == GET_OFFLINE_MSG){
                                     json elements = json::array();
@@ -452,6 +455,14 @@ class client: public menu{
                                             cout << elements[i] << endl;
                                         }
                                     }
+                                }
+                                else if(recvjson["request"] == PEER_CHAT){
+                                    cout << "\n[" << recvjson["sender"] << "->" << recvjson["receiver"] << "]: ";
+                                    cout << recvjson["message"] << endl;
+                                }
+                                else if(recvjson["request"] == NON_PEER_CHAT){
+                                    cout << '\n';
+                                    cout << recvjson["message"] << endl;
                                 }
                                 continue;
                             }
