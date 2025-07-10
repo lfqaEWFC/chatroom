@@ -486,14 +486,26 @@ class serve{
                     }
                     case(PRIVATE_CHAT):{
                         json *reflact = new json;
-                        if(handle_private_chat(json_quest,db,reflact,*new_args->user_to_friend,*new_args->cfd_to_user))
+                        if(handle_private_chat(json_quest,db,reflact,new_args->user_to_friend,*new_args->cfd_to_user))
                             sendjson(*reflact,new_args->cfd);
                         delete reflact;
                         break;
                     }
                     case(DEL_PEER):{
-                        json *reflact = new json;
                         handle_del_peer(json_quest,db,new_args->user_to_friend);
+                        break;
+                    }
+                    case(ADD_BLACKLIST):{
+                        json *reflact = new json;
+                        if(handle_add_black(json_quest,reflact,db))
+                            sendjson(*reflact,new_args->cfd);
+                        delete reflact;
+                        break;
+                    }
+                    case(REMOVE_BLACKLIST):{
+                        json *reflact = new json;
+                        if(handle_rem_black(json_quest,reflact,db))
+                            sendjson(*reflact,new_args->cfd);
                         delete reflact;
                         break;
                     }

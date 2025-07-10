@@ -185,7 +185,7 @@ class client: public menu{
                                     sendjson(offline_pri,cfd);
                                     pthread_cond_wait(&recv_cond,&recv_lock);
                                     if(pri_chat_flag && !end_flag)
-                                        handle_pri_chat(username,fri_user,cfd,&end_flag);
+                                        handle_pri_chat(username,fri_user,cfd,&end_flag,&pri_chat_flag);
                                     cout << "=============================================" << endl;                                 
                                     wait_user_continue();
                                     chat_name_flag = false;                                                                  
@@ -258,7 +258,17 @@ class client: public menu{
                                 break;
                             }
                             case 6:{
-                                
+                                system("clear");
+                                handle_black(username,cfd);
+                                pthread_cond_wait(&recv_cond,&recv_lock);
+                                wait_user_continue();
+                                break;
+                            }
+                            case 7:{
+
+                            }
+                            case 8:{
+
                             }
                             default:{
                                 cout << "请输入正确的选项..." << endl;
@@ -408,19 +418,23 @@ class client: public menu{
                                     }
                                 }
                                 else if(recvjson["request"] == DEAL_FRI_REQ){
-                                    cout << recvjson["reflact"] << endl;
+                                    string reflact = recvjson["reflact"];
+                                    cout << reflact << endl;
                                 }
                                 else if(recvjson["request"] == CHAT_NAME){
+                                    string reflact = recvjson["reflact"];
                                     if(recvjson["chat_flag"] == false)
-                                        cout << recvjson["reflact"] << endl;
-                                    else{
-                                        cout << recvjson["reflact"] << endl;
+                                        cout << reflact << endl;
+                                    else{                             
+                                        cout << reflact << endl;
+                                        cout << "=============================================" << endl;
                                         *new_args->chat_name_flag = true;
                                     }
                                 }
                                 else if(recvjson["request"] == GET_HISTORY_PRI){
                                     if(recvjson["ht_flag"] == false){
-                                        cout << recvjson["reflact"] << '\n' << endl;
+                                        string reflact = recvjson["reflact"];
+                                        cout << reflact << '\n' << endl;
                                     }else{
                                         json history = recvjson["reflact"];
                                         for (auto& msg : history) {
@@ -433,6 +447,12 @@ class client: public menu{
                                     }
                                     *new_args->pri_chat_flag = true;
                                 }
+                                else if(recvjson["request"] == ADD_BLACKLIST){
+                                    cout << recvjson["reflact"] << endl;
+                                }
+                                else if(recvjson["request"] == REMOVE_BLACKLIST){
+                                    cout << recvjson["reflact"] << endl;
+                                }
                                 else{
                                     
                                 }
@@ -443,7 +463,17 @@ class client: public menu{
                             }
                             else if(recvjson["sort"] == MESSAGE){
                                 if(recvjson["request"] == ASK_ADD_FRIEND){
+                                    cout << "\r\033[K" << flush;
                                     cout << recvjson["message"] << endl;
+                                    rl_on_new_line();
+                                    rl_redisplay();
+                                }
+                                else if(recvjson["request"] == ADD_BLACKLIST){
+                                    *new_args->pri_chat_flag = false;
+                                    cout << "\r\033[K" << flush;
+                                    cout << recvjson["reflact"] << endl;
+                                    rl_on_new_line();
+                                    rl_redisplay();
                                 }
                                 else if(recvjson["request"] == GET_OFFLINE_MSG){
                                     json elements = json::array();
@@ -457,22 +487,29 @@ class client: public menu{
                                     }
                                 }
                                 else if(recvjson["request"] == PEER_CHAT){
-                                    rl_crlf();
-                                    cout << "[" << recvjson["sender"] << "->" << recvjson["receiver"] << "]: ";
-                                    cout << recvjson["message"] << endl;
+                                    string sender = recvjson["sender"];
+                                    string receiver = recvjson["receiver"];
+                                    string message = recvjson["message"];
+                                    cout << "\r\033[K" << flush;
+                                    cout << "[" << sender << "->" << receiver << "]: ";
+                                    cout << message << endl;
                                     rl_on_new_line();
                                     rl_redisplay();
                                 }
                                 else if(recvjson["request"] == NON_PEER_CHAT){
-                                    rl_crlf();
-                                    cout << recvjson["message"] << endl;
+                                    string message = recvjson["message"];
+                                    cout << "\r\033[K" << flush;
+                                    cout << message << endl;                                  
                                     rl_on_new_line();
                                     rl_redisplay();
                                 }
                                 continue;
                             }
                             else if(recvjson["sort"] == ERROR){
+                                cout << "\r\033[K" << flush;
                                 cout << "发生错误 : " << recvjson["reflact"] << endl;
+                                rl_on_new_line();
+                                rl_redisplay();
                                 *new_args->end_flag = true;
                                 *new_args->end_start_flag = true;
                                 *new_args->end_chat_flag = true;
@@ -480,7 +517,10 @@ class client: public menu{
                                 return nullptr;
                             }
                             else{
-                                cout << "接受信息类型错误" << endl;
+                                cout << "\r\033[K" << flush;
+                                cout << "接受信息类型错误: " << recvjson["sort"] << endl;
+                                rl_on_new_line();
+                                rl_redisplay();
                                 *new_args->end_flag = true;
                                 *new_args->end_start_flag = true;
                                 *new_args->end_chat_flag = true;

@@ -183,7 +183,7 @@ void handle_history_pri(json *offline_pri,string username){
     return;
 }
 
-void handle_pri_chat(string username,string fri_user,int cfd,bool* end_flag){ 
+void handle_pri_chat(string username,string fri_user,int cfd,bool* end_flag,bool* pri_flag){ 
     
     cout << "进入私聊模式，对方：" << fri_user << endl;
     cout << "提示：\n"
@@ -191,11 +191,11 @@ void handle_pri_chat(string username,string fri_user,int cfd,bool* end_flag){
         << "- 输入 /file 可发送文件。\n"
         << "- 输入 /exit 可退出私聊。\n" << endl;
 
-        while (true && !(*end_flag)){
+        while (true && !(*end_flag) && *pri_flag){
            
             char show[MAX_REASONABLE_SIZE];
       
-            sprintf(show,"[\"%s\"->\"%s\"]: ",username.c_str(),fri_user.c_str());        
+            sprintf(show,"[%s->%s]: ",username.c_str(),fri_user.c_str());        
             char *input = readline(show);
             if (!input) break;                   
             string message = string(input);
@@ -212,16 +212,74 @@ void handle_pri_chat(string username,string fri_user,int cfd,bool* end_flag){
                 break;
             }
             else {
-                json msg = {
-                    {"request", PRIVATE_CHAT},
-                    {"from", username},
-                    {"to", fri_user},
-                    {"file_flag", false},
-                    {"message", message}
-                };
-                sendjson(msg, cfd);
+                if(!(*end_flag) && *pri_flag){
+                    json msg = {
+                        {"request", PRIVATE_CHAT},
+                        {"from", username},
+                        {"to", fri_user},
+                        {"file_flag", false},
+                        {"message", message}
+                    };
+                    sendjson(msg, cfd);
+                }
             }
         }
         
+    return;
+}
+
+void handle_black(string username,int cfd) {
+
+    char* input;
+    json blacklist;
+    bool in_flag = true;
+
+    cout << "=============" << endl;
+    cout << " a.加入黑名单 " << endl;
+    cout << " b.移除黑名单 " << endl;
+    cout << "=============" << endl;
+
+    while(in_flag) {
+        input = readline("请输入选项: ");
+        if (input == nullptr) {
+            cout << "输入不能为空，请重新输入..." << endl;
+            continue;
+        }
+        if(strlen(input) > 1){
+            cout << "请输入一个字符...." << endl;
+            continue;
+        }
+        char choice = input[0];
+        free(input);
+        switch(choice) {
+            case 'a': {
+                cout << "请输入要加入黑名单的用户名:" << endl;
+                string target;
+                cin >> target;
+                blacklist["request"] = ADD_BLACKLIST;
+                blacklist["username"] = username;
+                blacklist["target"] = target;
+                in_flag = false;
+                break;
+            }
+            case 'b': {
+                cout << "请输入要移除黑名单的用户名:" << endl;
+                string target;
+                cin >> target;
+                blacklist["request"] = REMOVE_BLACKLIST;
+                blacklist["username"] = username;
+                blacklist["target"] = target;
+                in_flag = false;
+                break;
+            }
+            default: {
+                cout << "请输入选项 a 或 b..." << endl;
+                break;
+            }
+        }
+    }
+
+    sendjson(blacklist,cfd);
+
     return;
 }

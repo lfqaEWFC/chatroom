@@ -672,7 +672,7 @@ bool handle_chat_name(json json_quest,unique_ptr<database> &db,json *reflact,uno
     }
 
 
-    res = db->query_sql("SELECT * FROM friendship WHERE username = '"+username+"' AND friend_username = '"+fri_user+"' AND status = 1");
+    res = db->query_sql("SELECT status FROM friendship WHERE username = '"+username+"' AND friend_username = '"+fri_user+"'");
     if(res == nullptr){
         *reflact = {
             {"sort",ERROR},
@@ -680,8 +680,8 @@ bool handle_chat_name(json json_quest,unique_ptr<database> &db,json *reflact,uno
         };
         return true;
     }
-    rows = mysql_num_rows(res);
-    if(rows == 0){
+    MYSQL_ROW row = mysql_fetch_row(res);
+    if(!row){
         *reflact = {
             {"sort",REFLACT},
             {"request",CHAT_NAME},
@@ -690,14 +690,34 @@ bool handle_chat_name(json json_quest,unique_ptr<database> &db,json *reflact,uno
         };
         return true;
     }else{
-        (*user_to_friend)[username] = fri_user;
-        *reflact = {
-            {"sort",REFLACT},
-            {"request",CHAT_NAME},
-            {"chat_flag",true},
-            {"pri_username",fri_user},
-            {"reflact","============================================="}
-        };
+        string status_str = row[0];
+        int status = stoi(status_str);
+        if(status == 1){
+            (*user_to_friend)[username] = fri_user;
+            *reflact = {
+                {"sort",REFLACT},
+                {"request",CHAT_NAME},
+                {"chat_flag",true},
+                {"pri_username",fri_user},
+                {"reflact","验证成功，可进入私聊模式..."}
+            };
+        }
+        else if(status == 2){
+            *reflact = {
+                {"sort",REFLACT},
+                {"request",CHAT_NAME},
+                {"chat_flag",false},
+                {"reflact","你已将"+fri_user+"加入黑名单...."}
+            };
+        }
+        else if(status == 3){
+            *reflact = {
+                {"sort",REFLACT},
+                {"request",CHAT_NAME},
+                {"chat_flag",false},
+                {"reflact","你已被"+fri_user+"加入黑名单...."}
+            };
+        }
         return true;
     }
 
@@ -759,15 +779,15 @@ bool handle_history_pri(json json_quest, unique_ptr<database> &db, json *reflact
     }
 
     if(mysql_num_rows(res) == 0){
-
         *reflact = {
             {"sort",REFLACT},
             {"request",GET_HISTORY_PRI},
             {"ht_flag",false},
             {"reflact","暂无历史消息..."} 
         };
-
-    }else{
+    }
+    else
+    {
         json history_msgs = json::array();
         MYSQL_ROW row;
 
@@ -793,7 +813,7 @@ bool handle_history_pri(json json_quest, unique_ptr<database> &db, json *reflact
 }
 
 bool handle_private_chat(json json_quest,unique_ptr<database> &db,json *reflact, 
-    unordered_map<string, string> user_to_friend,unordered_map<int, string> cfd_to_user)
+    unordered_map<string, string> *user_to_friend,unordered_map<int, string> cfd_to_user)
 {
     string sender = json_quest["from"];
     string receiver = json_quest["to"];
@@ -804,6 +824,30 @@ bool handle_private_chat(json json_quest,unique_ptr<database> &db,json *reflact,
 
     }
     else{
+        MYSQL_RES *res = db->query_sql("SELECT status FROM friendship WHERE username = '"+sender+"' AND friend_username = '"+receiver+"'");
+        if(res == nullptr){
+            cout << "SELECT failed" << endl;
+            *reflact = {
+                {"sort",ERROR}, 
+                {"reflact","MYSQL SELECT ERROR"}
+            };
+            return true;
+        }
+        MYSQL_ROW row = mysql_fetch_row(res);
+        if(row){
+            string status_str = row[0];
+            int status = stoi(status_str);
+            if(status == 3){
+                *reflact = {
+                    {"sort",MESSAGE},
+                    {"request",ADD_BLACKLIST},
+                    {"reflact","你已被"+receiver+"加入黑名单..."}                
+                };
+                (*user_to_friend).erase((*user_to_friend)[sender]);
+                return true;
+            }  
+        }
+
         bool sql_chk = db->execute_sql("INSERT INTO private_message(sender, receiver, content) VALUES('" +sender+ "','" +receiver+ "','"+message+"')");
         if(sql_chk == false){
             cout << "INSERT failed" << endl;
@@ -818,7 +862,7 @@ bool handle_private_chat(json json_quest,unique_ptr<database> &db,json *reflact,
         for (; it != cfd_to_user.end(); ++it) {
             if (it->second == receiver) {
                 int cfd = it->first;
-                if(user_to_friend[receiver] == sender){                   
+                if((*user_to_friend)[receiver] == sender){                   
                     json send_msg = {
                         {"sort",MESSAGE},
                         {"request",PEER_CHAT},
@@ -885,10 +929,174 @@ bool handle_private_chat(json json_quest,unique_ptr<database> &db,json *reflact,
 }
 
 bool handle_del_peer(json json_quest,unique_ptr<database>&db,unordered_map<string, string> *user_to_friend){
+
     string sender = json_quest["from"];
     string receiver = json_quest["to"];
 
     (*user_to_friend).erase((*user_to_friend)[sender]);
+
+    return true;
+}
+
+bool handle_add_black(json json_quest, json *reflact, unique_ptr<database>& db){
+
+    string username = json_quest["username"];
+    string target = json_quest["target"];
+
+    if(target == username){
+        *reflact = {
+            {"sort", REFLACT},
+            {"request", REMOVE_BLACKLIST},
+            {"reflact", "您不能将自己添加到黑名单..."}
+        };
+        return true;
+    }
+
+    string sql_check = "SELECT status FROM friendship "
+                       "WHERE username = '"+username+"' AND friend_username = '"+target+"';";
+    MYSQL_RES *res = db->query_sql(sql_check);
+    if (res == nullptr) {
+        cout << "SELECT ERROR" << endl;
+        *reflact = {
+            {"sort", ERROR},
+            {"reflact", "MYSQL SELECT ERROR"}
+        };
+        return true;
+    }
+    MYSQL_ROW row = mysql_fetch_row(res);
+    if (!row) {
+        mysql_free_result(res);
+        *reflact = {
+            {"sort", REFLACT},
+            {"request", ADD_BLACKLIST},
+            {"reflact", "您还尚未与该用户建立好友关系..."}
+        };
+        return true;
+    }
+    else{
+        string status_str = row[0];
+        int status = stoi(status_str);
+        if(status == 2){
+            *reflact = {
+                {"sort", REFLACT},
+                {"request", ADD_BLACKLIST},
+                {"reflact", "已经添加到黑名单，请勿重复添加..."}
+            };
+            return true;
+        }
+    }
+    mysql_free_result(res);
+
+    string sql_update1 = "UPDATE friendship SET status = 2 WHERE "
+                         "username = '"+username+"' AND friend_username = '"+target+"';";
+    string sql_update2 = "UPDATE friendship SET status = 3 WHERE "
+                         "username = '"+target+"' AND friend_username = '"+username+"' AND status = 1;";
+    bool chk1 = db->execute_sql(sql_update1);
+    bool chk2 = db->execute_sql(sql_update2);
+    if (chk1 && chk2) {
+        *reflact = {
+            {"sort", REFLACT},
+            {"request", ADD_BLACKLIST},
+            {"reflact", "成功将用户"+target+"添加至黑名单..."}
+        };
+    } 
+    else {
+        *reflact = {
+            {"sort", REFLACT},
+            {"request", ADD_BLACKLIST},
+            {"reflact", "添加黑名单操作失败..."}
+        };
+    }
+
+    return true;
+}
+
+bool handle_rem_black(json json_quest,json *reflact,unique_ptr<database>&db){
+    
+    int status;
+    int per_status;
+    string sql_update;
+    string username = json_quest["username"];
+    string target = json_quest["target"];
+
+    if(target == username){
+        *reflact = {
+            {"sort", REFLACT},
+            {"request", REMOVE_BLACKLIST},
+            {"reflact", "您不能将自己移出黑名单..."}
+        };
+        return true;
+    }
+
+    string sql_check1 = "SELECT status FROM friendship "
+                        "WHERE username = '"+username+"' AND friend_username = '"+target+"';";
+    string sql_check2 = "SELECT status FROM friendship "
+                        "WHERE username = '"+target+"' AND friend_username = '"+username+"';";
+    MYSQL_RES *res1 = db->query_sql(sql_check1);
+    MYSQL_RES *res2 = db->query_sql(sql_check2);
+
+    if (res1 == nullptr || res2 == nullptr) {
+        cout << "SELECT ERROR" << endl;
+        *reflact = {
+            {"sort", ERROR},
+            {"reflact", "MYSQL SELECT ERROR"}
+        };
+        return true;
+    }
+    MYSQL_ROW row1 = mysql_fetch_row(res1);
+    MYSQL_ROW row2 = mysql_fetch_row(res2);
+    if (!row1 || !row2) {
+        mysql_free_result(res1);
+        *reflact = {
+            {"sort", REFLACT},
+            {"request", REMOVE_BLACKLIST},
+            {"reflact", "您还尚未与该用户建立好友关系..."}
+        };
+        return true;
+    }
+    else{
+        string status_str1 = row1[0];
+        string status_str2 = row2[0];
+        status = stoi(status_str1);
+        per_status = stoi(status_str2);
+
+        if(status == 1){
+            *reflact = {
+                {"sort", REFLACT},
+                {"request", REMOVE_BLACKLIST},
+                {"reflact", "未在黑名单中..."}
+            };
+            return true;
+        }
+    }
+    mysql_free_result(res1);
+    mysql_free_result(res2);
+    
+    if(per_status == 3){
+        sql_update = "UPDATE friendship SET status = 1 WHERE "
+                            "(username = '"+username+"' AND friend_username = '"+target+"' AND status = 2) OR "
+                            "(username = '"+target+"' AND friend_username = '"+username+"' AND status = 3);";
+    }
+    if(per_status == 2){
+        sql_update = "UPDATE friendship SET status = 3 WHERE "
+                            "(username = '"+username+"' AND friend_username = '"+target+"' AND status = 2) OR "
+                            "(username = '"+target+"' AND friend_username = '"+username+"' AND status = 3);";
+    }
+    bool chk = db->execute_sql(sql_update);
+    if(chk){
+        *reflact = {
+            {"sort", REFLACT},
+            {"request", REMOVE_BLACKLIST},
+            {"reflact", "成功将用户"+target+"移出黑名单..."}
+        };
+    }
+    else{
+        *reflact = {
+            {"sort", REFLACT},
+            {"request", REMOVE_BLACKLIST},
+            {"reflact", "移出黑名单操作失败..."}
+        };
+    }
 
     return true;
 }
