@@ -284,3 +284,31 @@ void handle_black(string username,int cfd) {
 
     return;
 }
+
+void handle_check_friend(string username,int cfd){
+
+    json check = {
+        {"username",username},
+        {"request",CHECK_FRIEND},
+    };
+    sendjson(check,cfd);
+
+    return;
+
+}
+
+void handle_delete_friend(string username,int cfd){
+
+    char show[NOMSIZE] = "请输入需要删除的用户: ";
+    char *del_user = readline(show);
+
+    json delete_json{
+        {"username",username},
+        {"del_user",del_user},
+        {"request",DELETE_FRIEND}
+    };
+
+    sendjson(delete_json,cfd);
+
+    return;
+}

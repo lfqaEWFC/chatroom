@@ -204,33 +204,6 @@ bool handle_check_answer(json json_quest,unique_ptr<database> &db,json *reflact)
     return false;
 }
 
-bool handle_in_online(json json_quest,unique_ptr<database> &db){
-
-    string recv_username = json_quest["username"];
-    redisReply *online_reply = new redisReply;
-
-    online_reply = db->execRedis("exists online_users");
-
-    if(online_reply == nullptr){
-        cout << "COMMAND EXISTS ERROR" << endl;
-        return false;
-    }else{
-        redisReply *check_reply = new redisReply;
-        check_reply = db->execRedis("SADD online_users '"+recv_username+"'");
-        if(check_reply == nullptr){
-            cout << "COMMAND SADD ERROR" << endl;
-            delete online_reply;
-            delete check_reply;
-            return false;
-        }
-        delete check_reply;
-    }
-
-    delete online_reply;
-    
-    return true;
-}
-
 bool handle_logout(json json_quest, unique_ptr<database> &db, json *reflact, unordered_map<int, string>* cfd_to_user) {
     
     string recv_username = json_quest["username"];
@@ -238,7 +211,6 @@ bool handle_logout(json json_quest, unique_ptr<database> &db, json *reflact, uno
     for (auto it = cfd_to_user->begin(); it != cfd_to_user->end(); ++it) {
         if (it->second == recv_username) {
             int cfd = it->first;
-            db->redis_del_online_user(recv_username);
             cout << "delete cfd_to_user" << endl;
             cfd_to_user->erase(it);
 
@@ -1102,6 +1074,84 @@ bool handle_rem_black(json json_quest,json *reflact,unique_ptr<database>&db){
             {"sort", REFLACT},
             {"request", REMOVE_BLACKLIST},
             {"reflact", "移出黑名单操作失败..."}
+        };
+    }
+
+    return true;
+}
+
+bool handle_check_friend(json json_quest,json *reflact,unique_ptr<database>&db,unordered_map<int, string>* cfd_to_user){
+    
+    MYSQL_ROW row;
+    string username = json_quest["username"];
+    MYSQL_RES *res = db->query_sql("SELECT friend_username FROM friendship WHERE username = '"+username+"'");
+
+    if(res == nullptr){
+        cout << "SELECT ERROR" << endl;
+        *reflact = {
+            {"sort", ERROR},
+            {"reflact", "MYSQL SELECT ERROR"}
+        };
+        db->free_result(res);
+        return true;
+    }
+    json friends = json::array();
+    while((row = mysql_fetch_row(res)) != nullptr){
+        if(row[0] != nullptr)
+            friends.push_back(row[0]);
+        string fri_name = row[0];
+        auto it = (*cfd_to_user).begin();
+        for(;it != (*cfd_to_user).end();it++){
+            if(fri_name == it->second){
+                friends.push_back("[在线]");
+            }
+        }
+        if(it == (*cfd_to_user).end()){
+            friends.push_back("[离线]");
+        }
+    }
+
+    *reflact = {
+        {"sort",REFLACT},
+        {"request",CHECK_FRIEND},
+        {"friends",friends}
+    };
+
+    db->free_result(res);
+    return true;
+}
+
+bool handle_del_friend(json json_quest,json *reflact,unique_ptr<database>&db){
+    
+    string username = json_quest["username"];
+    string del_user = json_quest["del_user"];
+
+    bool mysql_chk = db->execute_sql("DELETE FROM friendship WHERE "
+                                     "(username = '"+username+"' AND friend_username = '"+del_user+"') OR "
+                                     "(username = '"+del_user+"' AND friend_username = '"+username+"');");
+    
+    if (!mysql_chk) {
+        *reflact = {
+            {"sort", ERROR},
+            {"reflact", "MYSQL DELETE ERROR"}
+        };
+        return true;
+    }
+
+    MYSQL* affect = db->get_mysql_conn();
+    my_ulonglong affected = mysql_affected_rows(affect);
+    
+    if (affected > 0) {
+        *reflact = {
+            {"sort", REFLACT},
+            {"request", DELETE_FRIEND},
+            {"reflact", "删除成功"}
+        };
+    } else {
+        *reflact = {
+            {"sort", REFLACT},
+            {"request", DELETE_FRIEND},
+            {"reflact", "没有找到要删除的好友关系"}
         };
     }
 

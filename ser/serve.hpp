@@ -10,7 +10,6 @@ bool handle_signin(json json_quest, unique_ptr<database> &db);
 bool handle_login(json json_quest, unique_ptr<database> &db, json *reflact,unordered_map<int, string> *cfd_to_user);
 bool handle_forget_password(json json_quest, unique_ptr<database> &db, json *reflact);
 bool handle_check_answer(json json_quest, unique_ptr<database> &db, json *reflact);
-bool handle_in_online(json json_quest, unique_ptr<database> &db);
 bool handle_logout(json json_quest, unique_ptr<database> &db, json *reflact, unordered_map<int, string> *cfd_to_user);
 bool handle_break(json json_quest, unique_ptr<database> &db, json *reflact);
 bool handle_add_friend(json json_quest, unordered_map<int, string> *cfd_to_user, unique_ptr<database> &db, json *reflact);
@@ -24,3 +23,5 @@ bool handle_private_chat(json json_quest,unique_ptr<database> &db,json *reflact,
 bool handle_del_peer(json json_quest,unique_ptr<database>&db,unordered_map<string, string> *user_to_friend);
 bool handle_add_black(json json_quest,json *reflact,unique_ptr<database>&db);
 bool handle_rem_black(json json_quest,json *reflact,unique_ptr<database>&db);
+bool handle_check_friend(json json_quest,json *reflact,unique_ptr<database>&db,unordered_map<int, string>* cfd_to_user);
+bool handle_del_friend(json json_quest,json *reflact,unique_ptr<database>&db);

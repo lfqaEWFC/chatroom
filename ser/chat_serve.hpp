@@ -69,13 +69,7 @@ class serve{
             reactarr = new reactargs[REACTSIZE];
 
             database db("localhost", 0, "root", nullptr, "chat_database", "localhost", 6379);
-            redisReply* reply = db.execRedis("DEL online_users");
-            if(reply == nullptr){
-                cerr << "Main Redis DB DEL online_users Error" << endl;
-                startflag = false;
-                return;
-            }
-
+            
             return;
 
         }
@@ -395,14 +389,6 @@ class serve{
                         break;
                     }
                     case(IN_ONLINE):{
-                        if(handle_in_online(json_quest,db) == false){
-                            json send_json{
-                                {"sort",ERROR},
-                                {"reflact","服务端处理在线用户集合发生错误..."},
-                            };
-                            sendjson(send_json,new_args->cfd);
-                            break;
-                        }
                         cout << "add cfd_to_user" << json_quest["username"] <<endl;
                         (*new_args->cfd_to_user)[new_args->cfd] = json_quest["username"];
                         break;
@@ -505,6 +491,20 @@ class serve{
                     case(REMOVE_BLACKLIST):{
                         json *reflact = new json;
                         if(handle_rem_black(json_quest,reflact,db))
+                            sendjson(*reflact,new_args->cfd);
+                        delete reflact;
+                        break;
+                    }
+                    case(CHECK_FRIEND):{
+                        json *reflact = new json;
+                        if(handle_check_friend(json_quest,reflact,db,new_args->cfd_to_user))
+                            sendjson(*reflact,new_args->cfd);
+                        delete reflact;
+                        break;
+                    }
+                    case(DELETE_FRIEND):{
+                        json *reflact = new json;
+                        if(handle_del_friend(json_quest,reflact,db))
                             sendjson(*reflact,new_args->cfd);
                         delete reflact;
                         break;
