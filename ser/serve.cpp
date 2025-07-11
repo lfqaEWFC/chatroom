@@ -659,6 +659,7 @@ bool handle_chat_name(json json_quest,unique_ptr<database> &db,json *reflact,uno
             {"sort",ERROR},
             {"reflact","服务端查询用户表出错..."}
         };
+        mysql_free_result(res);
         return true;
     }
     ssize_t rows = mysql_num_rows(res);
@@ -678,6 +679,7 @@ bool handle_chat_name(json json_quest,unique_ptr<database> &db,json *reflact,uno
             {"sort",ERROR},
             {"reflact","服务端验证好友关系出错..."}
         };
+        mysql_free_result(res);
         return true;
     }
     MYSQL_ROW row = mysql_fetch_row(res);
@@ -688,11 +690,13 @@ bool handle_chat_name(json json_quest,unique_ptr<database> &db,json *reflact,uno
             {"chat_flag",false},
             {"reflact","您还尚未与该用户建立好友关系..."}
         };
+        mysql_free_result(res);
         return true;
     }else{
         string status_str = row[0];
         int status = stoi(status_str);
         if(status == 1){
+            cout << "add user_to_friend: "+username+"" << endl;
             (*user_to_friend)[username] = fri_user;
             *reflact = {
                 {"sort",REFLACT},
@@ -718,6 +722,7 @@ bool handle_chat_name(json json_quest,unique_ptr<database> &db,json *reflact,uno
                 {"reflact","你已被"+fri_user+"加入黑名单...."}
             };
         }
+        mysql_free_result(res);
         return true;
     }
 
@@ -843,7 +848,8 @@ bool handle_private_chat(json json_quest,unique_ptr<database> &db,json *reflact,
                     {"request",ADD_BLACKLIST},
                     {"reflact","你已被"+receiver+"加入黑名单..."}                
                 };
-                (*user_to_friend).erase((*user_to_friend)[sender]);
+                cout << "delete user_to_friend: "+sender+"" << endl;
+                (*user_to_friend).erase(sender);
                 return true;
             }  
         }
@@ -933,7 +939,8 @@ bool handle_del_peer(json json_quest,unique_ptr<database>&db,unordered_map<strin
     string sender = json_quest["from"];
     string receiver = json_quest["to"];
 
-    (*user_to_friend).erase((*user_to_friend)[sender]);
+    cout << "delete user_to_friend: "+sender+"" << endl;
+    (*user_to_friend).erase(sender);
 
     return true;
 }

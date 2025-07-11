@@ -209,6 +209,7 @@ void handle_pri_chat(string username,string fri_user,int cfd,bool* end_flag,bool
                     {"from",username},
                     {"to",fri_user}
                 };
+                sendjson(end, cfd);
                 break;
             }
             else {

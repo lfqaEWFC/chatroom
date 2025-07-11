@@ -28,7 +28,7 @@ typedef struct reactargs{
 typedef struct handle_recv_args{
     int cfd;
     int *reactcnt;
-    mutex *react_quene_mutex;
+    mutex *quene_mutex;
     unordered_map<int, string>* cfd_to_user;
     unordered_map<int, string>* cfd_to_buffer;
     unordered_map<string, string>* user_to_friend;
@@ -264,7 +264,7 @@ class serve{
                         args->cfd = evlist[i].data.fd;
                         args->reactcnt = &pthargs->cnt;
                         args->user_to_friend = pthargs->user_to_friend;
-                        args->react_quene_mutex = &pthargs->queue_mutex;
+                        args->quene_mutex = &pthargs->queue_mutex;
                         args->cfd_to_user = pthargs->cfd_to_user;
                         args->cfd_to_buffer = pthargs->cfd_to_buffer;
                         pthargs->handle_recv->addtask(handle_recv_func,args);
@@ -309,7 +309,7 @@ class serve{
                     perror("recv");
                     close(new_args->cfd);
                     {
-                        lock_guard<mutex> lock(*new_args->react_quene_mutex);
+                        lock_guard<mutex> lock(*new_args->quene_mutex);
                         (*new_args->reactcnt)--;
                         auto it = new_args->cfd_to_user->find(new_args->cfd);
                         auto del_buffer = new_args->cfd_to_buffer->find(new_args->cfd);
@@ -330,7 +330,7 @@ class serve{
             if(n == 0){
                 close(new_args->cfd);
                 {
-                    lock_guard<mutex> lock(*new_args->react_quene_mutex);
+                    lock_guard<mutex> lock(*new_args->quene_mutex);
                     (*new_args->reactcnt)--;
                     auto it = new_args->cfd_to_user->find(new_args->cfd);
                     auto del_buffer = new_args->cfd_to_buffer->find(new_args->cfd);
