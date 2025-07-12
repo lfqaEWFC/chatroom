@@ -177,7 +177,9 @@ class client: public menu{
                             case 2:{
                                 system("clear");
                                 json *chat_name = new json;
+                                rl_display_flag = true;
                                 handle_chat_name(chat_name,username);
+                                rl_display_flag = false;
                                 string fri_user = (*chat_name)["fri_user"];
                                 sendjson(*chat_name,cfd);
                                 delete chat_name;
@@ -266,9 +268,7 @@ class client: public menu{
                             }
                             case 6:{
                                 system("clear");
-                                rl_display_flag = true;
-                                handle_black(username,cfd);
-                                rl_display_flag = false;
+                                handle_black(username,cfd,&rl_display_flag);
                                 pthread_cond_wait(&recv_cond,&recv_lock);
                                 wait_user_continue();
                                 break;
@@ -481,7 +481,7 @@ class client: public menu{
                                     for (size_t i = 0; i + 1 < friends.size(); i+=2){
                                         string name = friends[i];
                                         string status = friends[i+1];
-                                        cout << "好友" << (i+1)/2 << ": " << name << " 状态：" << status << endl;
+                                        cout << "好友" << (i+1)/2+1 << ": " << name << " 状态：" << status << endl;
                                     }
                                 }
                                 else if(recvjson["request"] == DELETE_FRIEND){

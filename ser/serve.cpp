@@ -825,6 +825,16 @@ bool handle_private_chat(json json_quest,unique_ptr<database> &db,json *reflact,
                 return true;
             }  
         }
+        else{
+            *reflact = {
+                {"sort",MESSAGE},
+                {"request",ADD_BLACKLIST},
+                {"reflact","你已被"+receiver+"删除..."}                
+            };
+            cout << "delete user_to_friend: "+sender+"" << endl;
+            (*user_to_friend).erase(sender);
+            return true;
+        }
 
         bool sql_chk = db->execute_sql("INSERT INTO private_message(sender, receiver, content) VALUES('" +sender+ "','" +receiver+ "','"+message+"')");
         if(sql_chk == false){
@@ -1097,17 +1107,16 @@ bool handle_check_friend(json json_quest,json *reflact,unique_ptr<database>&db,u
     }
     json friends = json::array();
     while((row = mysql_fetch_row(res)) != nullptr){
-        if(row[0] != nullptr)
-            friends.push_back(row[0]);
-        string fri_name = row[0];
-        auto it = (*cfd_to_user).begin();
-        for(;it != (*cfd_to_user).end();it++){
-            if(fri_name == it->second){
-                friends.push_back("[在线]");
+        if(row[0] != nullptr){
+            string fri_name = row[0];
+            string status = "[离线]";
+            auto it = (*cfd_to_user).begin();
+            for(;it != (*cfd_to_user).end();it++){
+                if(fri_name == it->second)
+                    status = "[在线]";
             }
-        }
-        if(it == (*cfd_to_user).end()){
-            friends.push_back("[离线]");
+            friends.push_back(fri_name);
+            friends.push_back(status);
         }
     }
 
@@ -1121,33 +1130,49 @@ bool handle_check_friend(json json_quest,json *reflact,unique_ptr<database>&db,u
     return true;
 }
 
-bool handle_del_friend(json json_quest,json *reflact,unique_ptr<database>&db){
-    
+bool handle_del_friend(json json_quest,json *reflact,unique_ptr<database>&db) {
     string username = json_quest["username"];
     string del_user = json_quest["del_user"];
 
-    bool mysql_chk = db->execute_sql("DELETE FROM friendship WHERE "
-                                     "(username = '"+username+"' AND friend_username = '"+del_user+"') OR "
-                                     "(username = '"+del_user+"' AND friend_username = '"+username+"');");
-    
-    if (!mysql_chk) {
+    bool mysql_chk1 = db->execute_sql(
+        "DELETE FROM friendship WHERE "
+        "(username = '"+username+"' AND friend_username = '"+del_user+"') OR "
+        "(username = '"+del_user+"' AND friend_username = '"+username+"');"
+    );
+
+    MYSQL* affect = db->get_mysql_conn();
+    my_ulonglong affected1 = mysql_affected_rows(affect);
+
+    if (!mysql_chk1) {
         *reflact = {
             {"sort", ERROR},
-            {"reflact", "MYSQL DELETE ERROR"}
+            {"reflact", "MYSQL DELETE ERROR (friendship)"}
         };
         return true;
     }
 
-    MYSQL* affect = db->get_mysql_conn();
-    my_ulonglong affected = mysql_affected_rows(affect);
-    
-    if (affected > 0) {
+    bool mysql_chk2 = db->execute_sql(
+        "DELETE FROM private_message WHERE "
+        "(sender = '"+username+"' AND receiver = '"+del_user+"') OR "
+        "(sender = '"+del_user+"' AND receiver = '"+username+"');"
+    );
+
+    if (!mysql_chk2) {
+        *reflact = {
+            {"sort", ERROR},
+            {"reflact", "MYSQL DELETE ERROR (private_message)"}
+        };
+        return true;
+    }
+
+    if (affected1 > 0) {
         *reflact = {
             {"sort", REFLACT},
             {"request", DELETE_FRIEND},
             {"reflact", "删除成功"}
         };
-    } else {
+    } 
+    else {
         *reflact = {
             {"sort", REFLACT},
             {"request", DELETE_FRIEND},

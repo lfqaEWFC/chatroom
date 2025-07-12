@@ -229,7 +229,7 @@ void handle_pri_chat(string username,string fri_user,int cfd,bool* end_flag,bool
     return;
 }
 
-void handle_black(string username,int cfd) {
+void handle_black(string username,int cfd,bool *rl_display_flag) {
 
     char* input;
     json blacklist;
@@ -241,6 +241,7 @@ void handle_black(string username,int cfd) {
     cout << "=============" << endl;
 
     while(in_flag) {
+        *rl_display_flag = true; 
         input = readline("请输入选项: ");
         if (input == nullptr) {
             cout << "输入不能为空，请重新输入..." << endl;
@@ -252,6 +253,7 @@ void handle_black(string username,int cfd) {
         }
         char choice = input[0];
         free(input);
+        *rl_display_flag = false; 
         switch(choice) {
             case 'a': {
                 cout << "请输入要加入黑名单的用户名:" << endl;
