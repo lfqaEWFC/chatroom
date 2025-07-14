@@ -183,14 +183,15 @@ void handle_history_pri(json *offline_pri,string username){
     return;
 }
 
-void handle_pri_chat(string username,string fri_user,int cfd,bool* end_flag,bool* pri_flag){ 
-    
+void handle_pri_chat(string username,string fri_user,int cfd,int FTP_ctrl_cfd,bool* end_flag,
+                     bool* pri_flag,string client_num,pthread_cond_t *cond,pthread_mutex_t *mutex)
+{   
     cout << "进入私聊模式，对方：" << fri_user << endl;
     cout << "提示：\n"
         << "- 输入普通消息将直接发送。\n"
-        << "- 输入 /file 可发送文件。\n"
-        << "- 输入 /exit 可退出私聊。\n" << endl;
-
+        << "- 输入 /exit 可退出私聊。\n" 
+        << "- 输入 /file 可传输文件。\n" << endl;
+        
         while (true && !(*end_flag) && *pri_flag){
            
             char show[MAX_REASONABLE_SIZE];
@@ -201,7 +202,34 @@ void handle_pri_chat(string username,string fri_user,int cfd,bool* end_flag,bool
             string message = string(input);
         
             if (message == "/file") {
-                // 调用发送文件逻辑
+               char file_show[MAX_REASONABLE_SIZE];
+               strcpy(file_show,"请输入命令：");
+
+               cout << "进入文件传输模式：" << endl;
+               cout << "提示：\n"
+                    << "- 输入 EXIT 退出文件传输模式。\n"
+                    << "- 输入 LIST + 路径名 将列出目录。\n"
+                    << "- 输入 RETR + 文件路径 可传输文件。\n" << endl;
+
+                while (true && !(*end_flag) && *pri_flag){
+                    char *file_input = readline(file_show);
+
+                    if(strstr(file_input,"LIST")){
+                        send(FTP_ctrl_cfd,file_input,sizeof(file_input),0);
+                        handle_pthread_wait(*end_flag,cond,mutex);
+                    }
+                    else if(strstr(file_input,"RETR")){
+
+                    } 
+                    else if(strcpy(file_input,"EXIT") == 0){
+
+                    }
+                    else{
+                        cout << "命令错误，请重新输入命令..." << endl;
+                        continue;
+                    }
+                }
+                    
             }
             else if (message == "/exit") {
                 json end = {
@@ -312,5 +340,12 @@ void handle_delete_friend(string username,int cfd){
 
     sendjson(delete_json,cfd);
 
+    return;
+}
+
+void handle_pthread_wait(bool endflag,pthread_cond_t *cond,pthread_mutex_t *mutex){
+    if(!endflag)
+        pthread_cond_wait(cond,mutex);
+        
     return;
 }
