@@ -179,3 +179,16 @@ void wait_user_continue(){
     cin.ignore(numeric_limits<streamsize>::max(), '\n'); 
     cin.get();
 }
+
+char* isportnum(int fd){
+
+    sockaddr addr;
+    socklen_t len = sizeof(sockaddr);
+    char* result;
+    result = new char[MAXBUF];
+        getsockname(fd,&addr,&len);
+
+    return address_str_portnum(result,MAXBUF,&addr,len);
+    
+}
+

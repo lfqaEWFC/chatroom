@@ -21,3 +21,4 @@ char* address_str_portnum(char *result,ssize_t max_resultlen,sockaddr *addr,sock
 int set_nonblocking(int fd);
 bool sendjson(json sendjson,int cfd);
 void wait_user_continue();
+char* isportnum(int fd);

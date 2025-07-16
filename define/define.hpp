@@ -24,6 +24,11 @@
 #define CHECK_FRIEND 22
 #define DELETE_FRIEND 23
 #define LIST_CMD 24
+#define PASV_CMD 25
+#define RETR_START 26
+#define STOR_START 27
+#define END_FILE 28
+#define START_FILE 29
 #define MAX_REASONABLE_SIZE 8192
 #define REFLACT 1000
 #define FTP_PORTNUM "2100"
@@ -34,4 +39,5 @@
 #define REACTSIZE 48
 #define NOMSIZE 64
 #define LARGESIZE 512
+#define CLIENT_FILE_NUM 24
 #define HANDLE_RECV_NUM 96

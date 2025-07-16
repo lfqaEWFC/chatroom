@@ -184,7 +184,8 @@ void handle_history_pri(json *offline_pri,string username){
 }
 
 void handle_pri_chat(string username,string fri_user,int cfd,int FTP_ctrl_cfd,bool* end_flag,
-                     bool* pri_flag,string client_num,pthread_cond_t *cond,pthread_mutex_t *mutex)
+                     bool* FTP_stor_flag,bool* pri_flag,string client_num,
+                     pthread_cond_t *cond,pthread_mutex_t *mutex,string* file_name)
 {   
     cout << "进入私聊模式，对方：" << fri_user << endl;
     cout << "提示：\n"
@@ -209,27 +210,54 @@ void handle_pri_chat(string username,string fri_user,int cfd,int FTP_ctrl_cfd,bo
                cout << "提示：\n"
                     << "- 输入 EXIT 退出文件传输模式。\n"
                     << "- 输入 LIST + 路径名 将列出目录。\n"
-                    << "- 输入 RETR + 文件路径 可传输文件。\n" << endl;
+                    << "- 输入 STOR + 文件路径 可传输文件。\n" << endl;
 
                 while (true && !(*end_flag) && *pri_flag){
                     char *file_input = readline(file_show);
 
                     if(strstr(file_input,"LIST")){
-                        send(FTP_ctrl_cfd,file_input,sizeof(file_input),0);
+                        send(FTP_ctrl_cfd,file_input,strlen(file_input),0);
                         handle_pthread_wait(*end_flag,cond,mutex);
                     }
-                    else if(strstr(file_input,"RETR")){
-
+                    else if(strstr(file_input,"STOR")){                    
+                        string input_str(file_input);
+                        size_t pos = input_str.find(' ');
+                        if (pos != string::npos) {
+                            string filename = input_str.substr(pos + 1);
+                            if (filename.empty()) {
+                                cout << "命令格式错误，应为: STOR <文件路径>" << endl;
+                                continue;
+                            }
+                            if (filename.find(' ') != string::npos) {
+                                cout << "命令格式错误：只能有一个空格，应为: STOR <文件路径>" << endl;
+                                continue;
+                            }
+                            *file_name = filename; 
+                            int fd = open(filename.c_str(), O_RDONLY);
+                            if (fd == -1) {
+                                cout << "文件不存在或无法读取: " << filename << endl;
+                                continue;
+                            }
+                            close(fd);                
+                        }
+                        else {
+                            cout << "命令格式错误，应为: STOR <文件路径>" << endl;
+                            continue;
+                        }
+                        *FTP_stor_flag = true;
+                        send(FTP_ctrl_cfd,"PASV",strlen("PASV"),0);
+                        handle_pthread_wait(*end_flag,cond,mutex);
                     } 
-                    else if(strcpy(file_input,"EXIT") == 0){
-
+                    else if(strcmp(file_input,"EXIT") == 0){
+                        cout << "退出文件传输模式..." << endl;
+                        break;
                     }
                     else{
                         cout << "命令错误，请重新输入命令..." << endl;
                         continue;
                     }
-                }
-                    
+                    free(file_input);
+                }         
             }
             else if (message == "/exit") {
                 json end = {
@@ -252,8 +280,8 @@ void handle_pri_chat(string username,string fri_user,int cfd,int FTP_ctrl_cfd,bo
                     sendjson(msg, cfd);
                 }
             }
+            free(input);
         }
-        
     return;
 }
 
@@ -348,4 +376,38 @@ void handle_pthread_wait(bool endflag,pthread_cond_t *cond,pthread_mutex_t *mute
         pthread_cond_wait(cond,mutex);
         
     return;
+}
+
+int handle_pasv(string reflact)
+{
+    char* buffer = new char[reflact.size() + 1];
+    strcpy(buffer, reflact.c_str());
+
+    char delimiter[4] = "(),";
+    int cnt = 0;
+    const char* in_token[10];
+    char *token = strtok(buffer, delimiter);
+    while(token != NULL && cnt < 10){
+        in_token[cnt] = token;
+        cnt++; 
+        token = strtok(NULL, delimiter);
+    }
+
+    char data_ip[MAXBUF];
+    snprintf(data_ip, sizeof(data_ip), "%s.%s.%s.%s",
+             in_token[1], in_token[2], in_token[3], in_token[4]);
+    int port = atoi(in_token[5])*256 + atoi(in_token[6]);
+    char data_port[MAXBUF];
+    snprintf(data_port, sizeof(data_port), "%d", port);
+
+    int data_cfd = inetconnect(data_ip, data_port);
+
+    delete[] buffer;
+
+    if(data_cfd == -1){
+        perror("inetconnect");
+        return -1;
+    }
+
+    return data_cfd;
 }
