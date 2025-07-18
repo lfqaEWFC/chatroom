@@ -185,7 +185,7 @@ void handle_history_pri(json *offline_pri,string username){
 
 void handle_pri_chat(string username,string fri_user,int cfd,int FTP_ctrl_cfd,bool* end_flag,
                      bool* FTP_stor_flag,bool* pri_flag,string client_num,
-                     pthread_cond_t *cond,pthread_mutex_t *mutex,string* file_name)
+                     pthread_cond_t *cond,pthread_mutex_t *mutex,string* file_path)
 {   
     cout << "进入私聊模式，对方：" << fri_user << endl;
     cout << "提示：\n"
@@ -216,26 +216,43 @@ void handle_pri_chat(string username,string fri_user,int cfd,int FTP_ctrl_cfd,bo
                     char *file_input = readline(file_show);
 
                     if(strstr(file_input,"LIST")){
-                        send(FTP_ctrl_cfd,file_input,strlen(file_input),0);
+                        char *cmd = NULL;
+                        char *path = NULL;
+                        char *saveptr = NULL;
+                        
+                        cmd = strtok_r(file_input, " \n", &saveptr);
+                        path = strtok_r(NULL, " \n", &saveptr);
+
+                        json send_json;
+                        if(path != NULL){
+                            send_json = {
+                                {"cmd","LIST"},
+                                {"path",path},
+                                {"run_flag",true}
+                            };
+                        }
+                        else{
+                            send_json = {
+                                {"cmd","LIST"},
+                                {"run_flag",false}
+                            };
+                        }
+                        sendjson(send_json,FTP_ctrl_cfd);
                         handle_pthread_wait(*end_flag,cond,mutex);
                     }
                     else if(strstr(file_input,"STOR")){                    
                         string input_str(file_input);
                         size_t pos = input_str.find(' ');
+                        string filepath;
                         if (pos != string::npos) {
-                            string filename = input_str.substr(pos + 1);
-                            if (filename.empty()) {
+                            filepath = input_str.substr(pos + 1);
+                            if (filepath.empty()) {
                                 cout << "命令格式错误，应为: STOR <文件路径>" << endl;
                                 continue;
                             }
-                            if (filename.find(' ') != string::npos) {
-                                cout << "命令格式错误：只能有一个空格，应为: STOR <文件路径>" << endl;
-                                continue;
-                            }
-                            *file_name = filename; 
-                            int fd = open(filename.c_str(), O_RDONLY);
+                            int fd = open(filepath.c_str(), O_RDONLY);
                             if (fd == -1) {
-                                cout << "文件不存在或无法读取: " << filename << endl;
+                                cout << "文件不存在或无法读取: " << filepath << endl;
                                 continue;
                             }
                             close(fd);                
@@ -245,7 +262,13 @@ void handle_pri_chat(string username,string fri_user,int cfd,int FTP_ctrl_cfd,bo
                             continue;
                         }
                         *FTP_stor_flag = true;
-                        send(FTP_ctrl_cfd,"PASV",strlen("PASV"),0);
+
+                        json send_json = {
+                            {"cmd","PASV"},
+                            {"filepath",filepath}
+                        };
+                        sendjson(send_json,FTP_ctrl_cfd);
+                        *file_path = filepath;
                         handle_pthread_wait(*end_flag,cond,mutex);
                     } 
                     else if(strcmp(file_input,"EXIT") == 0){

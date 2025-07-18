@@ -27,10 +27,8 @@ typedef struct reactargs{
 
 typedef struct handle_recv_args{
     int cfd;
-    int *reactcnt;
-    mutex *quene_mutex;
+    string json_str;
     unordered_map<int, string>* cfd_to_user;
-    unordered_map<int, string>* cfd_to_buffer;
     unordered_map<string, string>* user_to_friend;
 }handle_recv_args;
 
@@ -254,14 +252,92 @@ class serve{
                     }
                     
                     if(evlist[i].events & EPOLLIN) {
+                        cout << "epoll_in" << endl;
                         handle_recv_args *args = new handle_recv_args;
                         args->cfd = evlist[i].data.fd;
-                        args->reactcnt = &pthargs->cnt;
                         args->user_to_friend = pthargs->user_to_friend;
-                        args->quene_mutex = &pthargs->queue_mutex;
                         args->cfd_to_user = pthargs->cfd_to_user;
-                        args->cfd_to_buffer = pthargs->cfd_to_buffer;
-                        pthargs->handle_recv->addtask(handle_recv_func,args);
+                        while(true){
+                            int n;
+                            char rec_quest[MAXBUF];
+                            string& buffer = (*pthargs->cfd_to_buffer)[args->cfd];
+                            cout << "recv" << endl;
+                            while((n = recv(args->cfd,rec_quest,MAXBUF-1,MSG_DONTWAIT)) > 0){
+                                buffer.append(rec_quest,n);
+                            }
+                            cout << "end recv" <<endl;
+                            if(n == -1){
+                                if(errno != EAGAIN && errno != EWOULDBLOCK){
+                                    perror("recv");
+                                    close(args->cfd);
+                                    {
+                                        lock_guard<mutex> lock(pthargs->queue_mutex);
+                                        pthargs->cnt--;
+                                        auto it = pthargs->cfd_to_user->find(args->cfd);
+                                        auto del_buffer = pthargs->cfd_to_buffer->find(args->cfd);
+                                        if(del_buffer != pthargs->cfd_to_buffer->end())
+                                            pthargs->cfd_to_buffer->erase(del_buffer);
+                                        if(it != pthargs->cfd_to_user->end()){
+                                            string username = it->second;
+                                            json del_online = {
+                                                {"request",LOGOUT},
+                                                {"username",username}
+                                            };
+                                            string json_str = del_online.dump();
+                                            args->json_str = json_str;
+                                            pthargs->handle_recv->addtask(handle_recv_func,args);
+                                            pthargs->cfd_to_user->erase(it);
+                                        }
+                                    }
+                                    delete args;
+                                    pthargs->cfd_to_buffer->erase(args->cfd);
+                                    return nullptr;
+                                }              
+                            }
+                
+                            if(n == 0){
+                                close(args->cfd);
+                                {
+                                    lock_guard<mutex> lock(pthargs->queue_mutex);
+                                    pthargs->cnt--;
+                                    auto it = pthargs->cfd_to_user->find(args->cfd);
+                                    auto del_buffer = pthargs->cfd_to_buffer->find(args->cfd);
+                                    if(del_buffer != pthargs->cfd_to_buffer->end())
+                                        pthargs->cfd_to_buffer->erase(del_buffer);
+                                    if(it != pthargs->cfd_to_user->end()){
+                                        string username = it->second;
+                                        json del_online = {
+                                            {"request",LOGOUT},
+                                            {"username",username}
+                                        };
+                                        string json_str = del_online.dump();
+                                        args->json_str = json_str;
+                                        pthargs->handle_recv->addtask(handle_recv_func,args);
+                                        pthargs->cfd_to_user->erase(it);
+                                    }
+                                }
+                                delete args;
+                                pthargs->cfd_to_buffer->erase(args->cfd);
+                                return nullptr;
+                            }
+                            if (buffer.size() < 4){
+                                cout << "end len: " << buffer.size() <<endl;
+                                break;
+                            }
+            
+                            uint32_t net_len;
+                            memcpy(&net_len, buffer.data(), 4);
+                            uint32_t json_len = ntohl(net_len);
+                            cout << "json_len : " <<json_len << endl;
+            
+                            if (buffer.size() < 4 + json_len) break;
+            
+                            string json_str = buffer.substr(4, json_len);
+                            args->json_str = json_str;
+                            
+                            buffer.erase(0, 4 + json_len);
+                            pthargs->handle_recv->addtask(handle_recv_func,args);
+                        }
                     }
                 }
             }
@@ -274,9 +350,8 @@ class serve{
         }
 
         static void *handle_recv_func(void *args){
-            char* rec_quest = new char[MAXBUF];
-            handle_recv_args *new_args = (handle_recv_args*)args;
-            string &buffer = (*new_args->cfd_to_buffer)[new_args->cfd];  
+            cout << "recv_func" << endl;
+            handle_recv_args *new_args = (handle_recv_args*)args; 
             static thread_local unique_ptr<database> db = nullptr;
 
             if (!db) {
@@ -294,225 +369,161 @@ class serve{
                 }
             }
 
-            int n;
-            while((n = recv(new_args->cfd,rec_quest,MAXBUF,MSG_DONTWAIT)) > 0){
-                buffer.append(rec_quest,n);
-            }
-            if(n == -1){
-                if(errno != EAGAIN && errno != EWOULDBLOCK){
-                    perror("recv");
-                    close(new_args->cfd);
-                    {
-                        lock_guard<mutex> lock(*new_args->quene_mutex);
-                        (*new_args->reactcnt)--;
-                        auto it = new_args->cfd_to_user->find(new_args->cfd);
-                        auto del_buffer = new_args->cfd_to_buffer->find(new_args->cfd);
-                        if(del_buffer != new_args->cfd_to_buffer->end())
-                            new_args->cfd_to_buffer->erase(del_buffer);
-                        if(it != new_args->cfd_to_user->end()){
-                            string username = it->second;
-                            db->redis_del_online_user(username);
-                            new_args->cfd_to_user->erase(it);
-                        }
-                    }
-                    delete new_args;
-                    delete[] rec_quest;
-                    return nullptr;
-                }              
-            }
-
-            if(n == 0){
-                close(new_args->cfd);
-                {
-                    lock_guard<mutex> lock(*new_args->quene_mutex);
-                    (*new_args->reactcnt)--;
-                    auto it = new_args->cfd_to_user->find(new_args->cfd);
-                    auto del_buffer = new_args->cfd_to_buffer->find(new_args->cfd);
-                    if(del_buffer != new_args->cfd_to_buffer->end())
-                        new_args->cfd_to_buffer->erase(del_buffer);
-                    if(it != new_args->cfd_to_user->end()){
-                        string username = it->second;
-                        db->redis_del_online_user(username);
-                        new_args->cfd_to_user->erase(it);
-                    }
-                }
-                delete new_args;
-                delete[] rec_quest;
+            json json_quest;
+            try {
+                json_quest = json::parse(new_args->json_str);
+            } catch (...) {
+                cerr << "JSON parse error\n";
                 return nullptr;
             }
-            cout << "in_true" <<endl;
-            while (true) {
 
-                if (buffer.size() < 4) break;
-                if (buffer.size() > MAX_REASONABLE_SIZE) break;
+            int request = json_quest["request"];
 
-                uint32_t net_len;
-                memcpy(&net_len, buffer.data(), 4);
-                uint32_t json_len = ntohl(net_len);
-                cout << "json_len : " <<json_len << endl;
-
-                if (buffer.size() < 4 + json_len) break;
-
-                string json_str = buffer.substr(4, json_len);
-                buffer = buffer.substr(4 + json_len);
-
-                json json_quest;
-                try {
-                    json_quest = json::parse(json_str);
-                } catch (...) {
-                    cerr << "JSON parse error\n";
-                    continue;
+            switch(request){
+                case(LOGIN):{
+                    json *reflact = new json;
+                    handle_login(json_quest,db,reflact,new_args->cfd_to_user);             
+                    sendjson(*reflact,new_args->cfd);
+                    delete reflact;
+                    break;
                 }
-
-                int request = json_quest["request"];
-
-                switch(request){
-                    case(LOGIN):{
-                        json *reflact = new json;
-                        handle_login(json_quest,db,reflact,new_args->cfd_to_user);             
-                        sendjson(*reflact,new_args->cfd);
-                        delete reflact;
+                case(FORGET_PASSWORD):{
+                    json *reflact = new json;
+                    handle_forget_password(json_quest,db,reflact);                                
+                    sendjson(*reflact,new_args->cfd);
+                    delete reflact;
+                    break;
+                }
+                case(CHECK_ANS):{
+                    json *reflact = new json;
+                    handle_check_answer(json_quest,db,reflact);
+                    sendjson(*reflact,new_args->cfd);
+                    delete reflact;
+                    break;
+                }
+                case(IN_ONLINE):{
+                    cout << "add cfd_to_user" << json_quest["username"] <<endl;
+                    (*new_args->cfd_to_user)[new_args->cfd] = json_quest["username"];
+                    break;
+                }
+                case(SIGNIN):{
+                    if(handle_signin(json_quest,db)){
+                        json send_json{
+                            {"sort",REFLACT},
+                            {"request",SIGNIN},
+                            {"reflact","注册成功，请进行下一步操作"},
+                        };
+                        sendjson(send_json,new_args->cfd);
                         break;
-                    }
-                    case(FORGET_PASSWORD):{
-                        json *reflact = new json;
-                        handle_forget_password(json_quest,db,reflact);                                
-                        sendjson(*reflact,new_args->cfd);
-                        delete reflact;
-                        break;
-                    }
-                    case(CHECK_ANS):{
-                        json *reflact = new json;
-                        handle_check_answer(json_quest,db,reflact);
-                        sendjson(*reflact,new_args->cfd);
-                        delete reflact;
-                        break;
-                    }
-                    case(IN_ONLINE):{
-                        cout << "add cfd_to_user" << json_quest["username"] <<endl;
-                        (*new_args->cfd_to_user)[new_args->cfd] = json_quest["username"];
-                        break;
-                    }
-                    case(SIGNIN):{
-                        if(handle_signin(json_quest,db)){
-                            json send_json{
-                                {"sort",REFLACT},
-                                {"request",SIGNIN},
-                                {"reflact","注册成功，请进行下一步操作"},
-                            };
-                            sendjson(send_json,new_args->cfd);
-                            break;
-                        }else{
-                            json send_json{
-                                {"sort",REFLACT},
-                                {"request",SIGNIN},
-                                {"reflact","注册失败，请重新注册"},
-                            };
-                            sendjson(send_json,new_args->cfd);
-                            break;
-                        }
-                    }
-                    case(LOGOUT):{
-                        json *reflact = new json;
-                        handle_logout(json_quest,db,reflact,new_args->cfd_to_user);                         
-                        sendjson(*reflact,new_args->cfd);
-                        delete reflact;
-                        break;
-                    }
-                    case(BREAK):{
-                        json *reflact = new json;
-                        handle_break(json_quest,db,reflact);
-                        sendjson(*reflact,new_args->cfd);
-                        delete reflact;
-                        break;
-                    }
-                    case(ADD_FRIEND):{
-                        json *reflact = new json;
-                        handle_add_friend(json_quest,new_args->cfd_to_user,db,reflact);
-                        sendjson(*reflact,new_args->cfd);
-                        delete reflact;
-                        break;
-                    }
-                    case(GET_OFFLINE_MSG):{
-                        json *reflact = new json;
-                        if(handle_get_offline(json_quest,db,reflact))
-                            sendjson(*reflact,new_args->cfd);
-                        delete reflact;
-                        break;
-                    }
-                    case(GET_FRIEND_REQ):{
-                        json *reflact = new json;
-                        if(handle_get_friend(json_quest,db,reflact)){
-                            sendjson(*reflact,new_args->cfd);
-                            cout << "get" << endl;
-                        }
-                        delete reflact;
-                        break;
-                    }
-                    case(DEAL_FRI_REQ):{
-                        json *reflact = new json;
-                        if(handle_deal_friend(json_quest,db,reflact))
-                            sendjson(*reflact,new_args->cfd);
-                        delete reflact;
-                        break;
-                    }
-                    case(CHAT_NAME):{
-                        json *reflact = new json;
-                        if(handle_chat_name(json_quest,db,reflact,new_args->user_to_friend))
-                            sendjson(*reflact,new_args->cfd);
-                        delete reflact;
-                        break;
-                    }
-                    case(GET_HISTORY_PRI):{
-                        json *reflact = new json;
-                        if(handle_history_pri(json_quest,db,reflact,*new_args->user_to_friend))
-                            sendjson(*reflact,new_args->cfd);
-                        delete reflact;
-                        break;    
-                    }
-                    case(PRIVATE_CHAT):{
-                        json *reflact = new json;
-                        if(handle_private_chat(json_quest,db,reflact,new_args->user_to_friend,*new_args->cfd_to_user))
-                            sendjson(*reflact,new_args->cfd);
-                        delete reflact;
-                        break;
-                    }
-                    case(DEL_PEER):{
-                        handle_del_peer(json_quest,db,new_args->user_to_friend);
-                        break;
-                    }
-                    case(ADD_BLACKLIST):{
-                        json *reflact = new json;
-                        if(handle_add_black(json_quest,reflact,db))
-                            sendjson(*reflact,new_args->cfd);
-                        delete reflact;
-                        break;
-                    }
-                    case(REMOVE_BLACKLIST):{
-                        json *reflact = new json;
-                        if(handle_rem_black(json_quest,reflact,db))
-                            sendjson(*reflact,new_args->cfd);
-                        delete reflact;
-                        break;
-                    }
-                    case(CHECK_FRIEND):{
-                        json *reflact = new json;
-                        if(handle_check_friend(json_quest,reflact,db,new_args->cfd_to_user))
-                            sendjson(*reflact,new_args->cfd);
-                        delete reflact;
-                        break;
-                    }
-                    case(DELETE_FRIEND):{
-                        json *reflact = new json;
-                        if(handle_del_friend(json_quest,reflact,db))
-                            sendjson(*reflact,new_args->cfd);
-                        delete reflact;
+                    }else{
+                        json send_json{
+                            {"sort",REFLACT},
+                            {"request",SIGNIN},
+                            {"reflact","注册失败，请重新注册"},
+                        };
+                        sendjson(send_json,new_args->cfd);
                         break;
                     }
                 }
+                case(LOGOUT):{
+                    json *reflact = new json;
+                    handle_logout(json_quest,db,reflact,new_args->cfd_to_user);                         
+                    sendjson(*reflact,new_args->cfd);
+                    delete reflact;
+                    break;
+                }
+                case(BREAK):{
+                    json *reflact = new json;
+                    handle_break(json_quest,db,reflact);
+                    sendjson(*reflact,new_args->cfd);
+                    delete reflact;
+                    break;
+                }
+                case(ADD_FRIEND):{
+                    json *reflact = new json;
+                    handle_add_friend(json_quest,new_args->cfd_to_user,db,reflact);
+                    sendjson(*reflact,new_args->cfd);
+                    delete reflact;
+                    break;
+                }
+                case(GET_OFFLINE_MSG):{
+                    json *reflact = new json;
+                    if(handle_get_offline(json_quest,db,reflact))
+                        sendjson(*reflact,new_args->cfd);
+                    delete reflact;
+                    break;
+                }
+                case(GET_FRIEND_REQ):{
+                    json *reflact = new json;
+                    if(handle_get_friend(json_quest,db,reflact)){
+                        sendjson(*reflact,new_args->cfd);
+                        cout << "get" << endl;
+                    }
+                    delete reflact;
+                    break;
+                }
+                case(DEAL_FRI_REQ):{
+                    json *reflact = new json;
+                    if(handle_deal_friend(json_quest,db,reflact))
+                        sendjson(*reflact,new_args->cfd);
+                    delete reflact;
+                    break;
+                }
+                case(CHAT_NAME):{
+                    json *reflact = new json;
+                    if(handle_chat_name(json_quest,db,reflact,new_args->user_to_friend))
+                        sendjson(*reflact,new_args->cfd);
+                    delete reflact;
+                    break;
+                }
+                case(GET_HISTORY_PRI):{
+                    json *reflact = new json;
+                    if(handle_history_pri(json_quest,db,reflact,*new_args->user_to_friend))
+                        sendjson(*reflact,new_args->cfd);
+                    delete reflact;
+                    break;    
+                }
+                case(PRIVATE_CHAT):{
+                    json *reflact = new json;
+                    if(handle_private_chat(json_quest,db,reflact,new_args->user_to_friend,*new_args->cfd_to_user))
+                        sendjson(*reflact,new_args->cfd);
+                    delete reflact;
+                    break;
+                }
+                case(DEL_PEER):{
+                    handle_del_peer(json_quest,db,new_args->user_to_friend);
+                    break;
+                }
+                case(ADD_BLACKLIST):{
+                    json *reflact = new json;
+                    if(handle_add_black(json_quest,reflact,db))
+                        sendjson(*reflact,new_args->cfd);
+                    delete reflact;
+                    break;
+                }
+                case(REMOVE_BLACKLIST):{
+                    json *reflact = new json;
+                    if(handle_rem_black(json_quest,reflact,db))
+                        sendjson(*reflact,new_args->cfd);
+                    delete reflact;
+                    break;
+                }
+                case(CHECK_FRIEND):{
+                    json *reflact = new json;
+                    if(handle_check_friend(json_quest,reflact,db,new_args->cfd_to_user))
+                        sendjson(*reflact,new_args->cfd);
+                    delete reflact;
+                    break;
+                }
+                case(DELETE_FRIEND):{
+                    json *reflact = new json;
+                    if(handle_del_friend(json_quest,reflact,db))
+                        sendjson(*reflact,new_args->cfd);
+                    delete reflact;
+                    break;
+                }    
             }
 
-            delete[] rec_quest;
             delete new_args;        
 
             return nullptr;
