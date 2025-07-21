@@ -1182,3 +1182,201 @@ bool handle_del_friend(json json_quest,json *reflact,unique_ptr<database>&db) {
 
     return true;
 }
+
+bool handle_add_file(json json_quest,json *reflact,unique_ptr<database>&db,unordered_map<int, string> cfd_to_user){
+
+    string sender = json_quest["sender"];
+    string filename = json_quest["filename"];
+    string receiver = json_quest["receiver"];
+
+    MYSQL_RES *res = db->query_sql("SHOW TABLEs LIKE 'private_file'");
+    if(res == nullptr){
+        cout << "SHOW failed" << endl;
+        *reflact = {
+            {"sort",ERROR},
+            {"reflact","MYSQL SHOW ERROR..."}
+        };
+        return true; 
+    }
+    if(mysql_num_rows(res)<=0){
+        bool execchk = db->execute_sql(
+            "CREATE TABLE private_file("
+            "id INT AUTO_INCREMENT PRIMARY KEY,"
+            "filename VARCHAR(64) NOT NULL,"
+            "sender VARCHAR(64) NOT NULL,"
+            "receiver VARCHAR(64) NOT NULL"
+            ");"
+        );
+        if(execchk == false){
+            cout << "CREAT ERROR" << endl;
+            *reflact = {
+                {"sort",ERROR},
+                {"reflact","MYSQL CREAT ERROR"}
+            };
+            return true;
+        }
+    }
+    bool exechk = db->execute_sql("INSERT INTO private_file(sender, receiver, filename) "
+                                  "VALUES('" +sender+ "','" +receiver+ "','"+filename+"')");
+    if(exechk == false){
+        cout << "INSERT failed" << endl;
+        *reflact = {
+            {"sort",ERROR},
+            {"reflact","MYSQL INSERT ERROR..."}
+        };
+        return true; 
+    }
+    auto it = cfd_to_user.begin();
+    for(;it != cfd_to_user.end();it++){
+        if(it->second == receiver){
+            int cfd = it->first;
+            json send_json = {
+                {"sort",MESSAGE},
+                {"request",NON_PEER_CHAT},
+                {"message","通知: 好友"+sender+"发送了一个文件"}
+            };
+            sendjson(send_json,cfd);
+            break;
+        }
+    }
+    
+    if(it == cfd_to_user.end()){
+        bool redis_chk = true;
+        string redis_key = "offline:private:" + receiver;
+        redisReply *reply = db->execRedis("HEXISTS "+redis_key+" "+sender+"");
+        if(reply == nullptr) redis_chk = false;
+        else if(reply->type == REDIS_REPLY_INTEGER){
+            if(reply->integer == 1){
+                freeReplyObject(reply);
+                cout << "increasing..." << endl;
+                reply = db->execRedis("HINCRBY "+redis_key+" "+sender+" 1");
+                if(reply == nullptr) redis_chk = false;
+            }
+            else{
+                freeReplyObject(reply);
+                cout << "setting..." << endl;
+                reply = db->execRedis("HSET "+redis_key+" "+sender+" 1");
+                if(reply == nullptr) redis_chk = false;
+            }
+        }
+        else{
+            freeReplyObject(reply);
+            cout << "redis reply type is wrong" << endl;
+            *reflact = {
+                {"sort",ERROR}, 
+                {"reflact","redis reply type is wrong"}
+            };
+            return true;
+        }
+        if(!redis_chk){
+            freeReplyObject(reply);
+            cout << "redis hash wrong" << endl;
+            *reflact = {
+                {"sort",ERROR}, 
+                {"reflact","redis hash wrong"}
+            };
+            return true;
+        }
+        if (reply) freeReplyObject(reply);
+    }
+
+    bool sql_chk = db->execute_sql("INSERT INTO private_message(sender, receiver, content) "
+                                   "VALUES('" +sender+ "','" +receiver+ "','"+sender+"向您发送了一个文件')");
+    if(sql_chk == false){
+        cout << "INSERT failed" << endl;
+        *reflact = {
+            {"sort",ERROR}, 
+            {"reflact","MYSQL INSERT ERROR"}
+        };
+        return true;
+    }
+
+    *reflact = {
+        {"sort",MESSAGE},
+        {"request",ADD_FILE},
+        {"message","文件 "+filename+" 上传成功..."}
+    };
+
+    return true;
+
+}
+
+bool handle_show_file(json json_quest,json *reflact,unique_ptr<database>&db){
+
+    MYSQL_ROW row;
+    string username = json_quest["username"];
+    string fri_user = json_quest["fri_user"];
+
+    MYSQL_RES* res = db->query_sql("SELECT filename FROM private_file "
+                                   "WHERE sender = '"+fri_user+"' AND receiver = '"+username+"'");
+    if(res == nullptr){
+        cout << "SELECT failed" << endl;
+        *reflact = {
+            {"sort",ERROR},
+            {"reflact","MYSQL SELECT ERROR..."}
+        };
+        return true; 
+    }
+
+    int rows = mysql_num_rows(res);
+    if(rows == 0){
+        *reflact = {
+            {"sort",REFLACT},
+            {"request",SHOW_FILE},
+            {"get_flag",false},
+            {"reflact","用户 "+fri_user+" 不存在或并未向您发送文件..."}
+        };
+        return true; 
+    }
+    json filenames = json::array();
+    while((row = mysql_fetch_row(res)) != nullptr){
+        if(row[0] != nullptr){
+            string filename = row[0];
+            filenames.push_back(filename);
+        }
+    }
+    *reflact = {
+        {"sort",REFLACT},
+        {"request",SHOW_FILE},
+        {"file_user",fri_user},
+        {"get_flag",true},
+        {"reflact",filenames}
+    };
+
+    return true;
+
+}
+
+bool handle_del_retr(json json_quest,json* reflact,unique_ptr<database>&db){
+
+    char cur_path[LARGESIZE];
+    char del_filename[LARGESIZE];
+    char file_path[MAXBUF];
+    string filename = json_quest["filename"];
+    string sender = json_quest["sender"];
+    string receiver = json_quest["receiver"];
+    
+    getcwd(cur_path,sizeof(cur_path));
+
+    sprintf(del_filename,"%s_to_%s-%s",sender.c_str(),receiver.c_str(),filename.c_str());
+    sprintf(file_path,"%s/%s/%s",cur_path,"file_tmp",del_filename);
+    remove(file_path);
+
+    bool sql_chk = db->execute_sql("DELETE FROM private_file WHERE sender = '"+sender+"' "
+                                   "AND receiver = '"+receiver+"' AND filename = '"+filename+"'");
+    if(sql_chk == false){
+        *reflact = {
+            {"sort",ERROR},
+            {"message","MYSQL DELETE ERROR"}
+        };
+        return true;
+    }
+
+    *reflact = {
+        {"sort",MESSAGE},
+        {"request",END_RETR},
+        {"message","文件 "+filename+" 下载完成..."}
+    };
+
+    return true;
+}

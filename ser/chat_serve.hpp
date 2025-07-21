@@ -521,6 +521,27 @@ class serve{
                         sendjson(*reflact,new_args->cfd);
                     delete reflact;
                     break;
+                }
+                case(ADD_FILE):{
+                    json *reflact = new json;
+                    if(handle_add_file(json_quest,reflact,db,*new_args->cfd_to_user))
+                        sendjson(*reflact,new_args->cfd);
+                    delete reflact;
+                    break;
+                }
+                case(SHOW_FILE):{
+                    json *reflact = new json;
+                    if(handle_show_file(json_quest,reflact,db))
+                        sendjson(*reflact,new_args->cfd);
+                    delete reflact;
+                    break;
+                }
+                case(END_RETR):{
+                    json *reflact = new json;
+                    if(handle_del_retr(json_quest,reflact,db))
+                        sendjson(*reflact,new_args->cfd);
+                    delete reflact;
+                    break;
                 }    
             }
 

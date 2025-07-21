@@ -149,7 +149,7 @@ class FTP{
         }
         return 0;
     }
-    
+
     int handle_sort(epoll_event *evlist,int workfd_num){
 
         for(int i=0;i<workfd_num;i++){
@@ -432,18 +432,19 @@ class FTP{
             string json_str = new_arg->buffer.substr(4, msg_len);
             new_arg->buffer.erase(0, 4 + msg_len);
 
-        json recvjson;
-        try
-        {
-            recvjson = json::parse(json_str);
-        }
-        catch (...)
-        {
-            cerr << "JSON parse error\n";
-            continue;
-        }   
+            json recvjson;
+            try
+            {
+                recvjson = json::parse(json_str);
+            }
+            catch (...)
+            {
+                cerr << "JSON parse error\n";
+                continue;
+            }   
             cout <<"cmd: " << recvjson["cmd"] << endl;
-            if(recvjson["cmd"] == "PASV"){
+            if(recvjson["cmd"] == "PASV")
+            {
                 char portnum_str[MAXBUF]; 
                 char *result = new char[MAXBUF];
                 sockaddr_storage addr;
@@ -498,8 +499,8 @@ class FTP{
                 delete[] res_token;
                 free(result);
             }
-            else {
-
+            else 
+            {
                 if(recvjson["cmd"] == "LIST"){
 
                     char dirpath[MAXBUF];
@@ -547,7 +548,8 @@ class FTP{
                     return NULL;
                 }
 
-                if((recvjson["cmd"] == "RETR") || (recvjson["cmd"] == "STOR")){
+                if((recvjson["cmd"] == "RETR") || (recvjson["cmd"] == "STOR"))
+                {
                     data_num = recvjson["client_num"];
                     cout << "pair: [" << data_num << "]" << endl;
                     cout << "cmd: [" << recvjson["cmd"] << "]" << endl;
@@ -576,13 +578,22 @@ class FTP{
                     }
                 }
 
-                if(recvjson["cmd"] == "RETR"){
-
+                if(recvjson["cmd"] == "RETR")
+                {
                     json send_json;
+                    char cur_path[LARGESIZE];    
+                    char open_path[MAXBUF];
+                    char load_filename[LARGESIZE];
                     my_data_pair->retr_flag = true;
 
-                    string filename = recvjson["file_path"];
-                    strcpy(my_data_pair->retr_filename,filename.c_str());
+                    string sender = recvjson["sender"];
+                    string filename = recvjson["filename"];
+                    string receiver = recvjson["receiver"];
+                    
+                    getcwd(cur_path,LARGESIZE);
+                    sprintf(load_filename,"%s_to_%s-%s",sender.c_str(),receiver.c_str(),filename.c_str());
+                    sprintf(open_path,"%s/%s/%s",cur_path,"file_tmp",load_filename);
+                    strcpy(my_data_pair->retr_filename,open_path);
 
                     if(open(my_data_pair->retr_filename,O_RDONLY,0644) == -1){
                         send_json = {
@@ -614,18 +625,31 @@ class FTP{
                     memset(sendbuf,0,sizeof(sendbuf));
                     return NULL;
                 }
-                else if(recvjson["cmd"] == "STOR"){
+                else if(recvjson["cmd"] == "STOR")
+                {                   
+                    DIR *dirp;
                     json send_json;
+                    char cur_path[LARGESIZE];               
                     char creat_name[LARGESIZE];
+                    char open_path[LARGESIZE*3];
+                                 
                     my_data_pair->stor_flag = true;
                     
                     string filename = recvjson["filename"];
+                    string sender = recvjson["sender"];
+                    string receiver = recvjson["receiver"];
 
-                    sprintf(creat_name,"%s%s","STOR_",filename.c_str());
+                    dirp = opendir("file_tmp");
+                    if(dirp == nullptr)
+                        mkdir("file_tmp",0755);
+                    getcwd(cur_path,LARGESIZE);                
+                    sprintf(creat_name,"%s_to_%s-%s",sender.c_str(),receiver.c_str(),filename.c_str());
+                    sprintf(open_path,"%s/%s/%s",cur_path,"file_tmp",creat_name);
                     strcpy(my_data_pair->stor_filename,creat_name);
                             
-                    my_data_pair->stor_filefd = open(creat_name,O_CREAT|O_RDWR|O_TRUNC,0644);
-                    if(my_data_pair->stor_filefd == -1){
+                    my_data_pair->stor_filefd = open(open_path,O_CREAT|O_RDWR|O_TRUNC,0644);
+                    if(my_data_pair->stor_filefd == -1)
+                    {
                         send_json = {
                             {"sort",MESSAGE},
                             {"request",STOR_START},
@@ -635,7 +659,8 @@ class FTP{
                         };
                         sendjson(send_json,new_arg->fd);
                         return NULL;
-                    }else{
+                    }else
+                    {
                         sprintf(sendbuf,"%s %s","150 Opening BINARY mode data connection for",creat_name);
                         send_json = {
                             {"sort",MESSAGE},
@@ -666,29 +691,17 @@ class FTP{
         data_args *new_arg = (data_args*) args;
         cout << "data_func" << endl;
 
-        if(new_arg->retr_flag){
-
+        if(new_arg->retr_flag)
+        {
             int file_fd = 0;
             ssize_t file_size = 0;
-            ssize_t send_size;
+            ssize_t send_size = 0;
             off_t off_set = 0;
             struct stat file_stat;
 
-            if(stat(new_arg->retr_filename,&file_stat) == -1){
-                perror("stat");
-            }
+            stat(new_arg->retr_filename,&file_stat);
             file_size = file_stat.st_size;
-            send_size = file_size;
             file_fd = open(new_arg->retr_filename,O_RDONLY,0754);
-
-            if(file_size > CHUNK_SIZE){
-                while(send_size > 0){
-                    ssize_t hav_send = sendfile(new_arg->fd,file_fd,&off_set,CHUNK_SIZE);
-                    send_size -= hav_send;
-                }
-            }else{
-                sendfile(new_arg->fd,file_fd,&off_set,CHUNK_SIZE);
-            }
 
             send_json = {
                 {"sort",MESSAGE},
@@ -697,14 +710,42 @@ class FTP{
                 {"data_num",new_arg->data_num},
                 {"reflact","226 transfer completed"}
             };
-            cout << "send_end" << endl;
             sendjson(send_json,new_arg->ctrl_pair_fd);
+
+            while (send_size < file_size) 
+            {
+                size_t chunk = (file_size - send_size) > CHUNK_SIZE 
+                               ? CHUNK_SIZE 
+                               : (file_size - send_size);
+
+                ssize_t sent = sendfile(new_arg->fd, file_fd, &off_set, chunk);
+                
+                if (sent < 0) {
+                    if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                        usleep(10000);
+                        continue;
+                    } else {
+                        perror("sendfile failed");
+                        break;
+                    }
+                } else if (sent == 0) {
+                    break;
+                }
+                
+                send_size += sent;
+            }
+            
+            close(file_fd);
+            
+            if (send_size != file_size) {
+                cout << "incompleted transfer..." << endl;
+            }
 
             return NULL;
             
         }
-        else if(new_arg->stor_flag){
-            
+        else if(new_arg->stor_flag)
+        {
             char *file_buf = new char[MAXBUF];
             int file_recvcnt = 0;
             data_args* prev_args = new_arg->data_args_list;
@@ -721,7 +762,6 @@ class FTP{
                 {"data_num",new_arg->data_num},
                 {"reflact","226 transfer completed"}
             };
-            cout << "send_end" << endl;
             sendjson(send_json,new_arg->ctrl_pair_fd);
 
             auto it = new_arg->data_pairs.begin();

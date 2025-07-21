@@ -11,6 +11,8 @@
 #include <sys/sendfile.h>
 #include <filesystem>
 #include <errno.h>
+#include<dirent.h>
+#include<sys/stat.h>
 
 using json = nlohmann::json;
 
@@ -21,10 +23,13 @@ typedef struct file_args
     bool run_flag;
     bool end_flag;
     bool get_num_flag;
+    string sender;
     string file_path;
+    string receiver;
     int data_num;
     int FTP_data_cfd;
     int FTP_ctrl_cfd;
+    int file_fd;
     int chat_server_cfd;
     pthread_cond_t *cond;
     pthread_mutex_t *lock;
@@ -41,10 +46,12 @@ typedef struct recv_args
     string *file_path;
     string *username;
     string *fog_username;
+    string *fri_username;
     bool *end_flag;
     bool *end_start_flag;
     bool *fog_que_flag;
     bool *pri_chat_flag;
+    bool *get_file_flag;
     bool *chat_name_flag;
     bool *rl_display_flag;
     bool *add_friend_req_flag;
@@ -67,7 +74,7 @@ public:
         fog_que_flag(false), add_friend_req_flag(false), chat_name_flag(false), pri_chat_flag(false),
         rl_display_flag(false), chat_choice(0), start_choice(0),
         cfd(in_cfd), FTP_ctrl_cfd(FTP_ctrl_cfd), client_num(client_num),
-        FTP_data_stor_flag(false), FTP_data_retr_flag(false){
+        FTP_data_stor_flag(false), FTP_data_retr_flag(false),get_file_flag(false){
 
         epfd = epoll_create(EPSIZE);
         ev.data.fd = cfd;
@@ -88,9 +95,11 @@ public:
         args->end_flag = &end_flag;
         args->username = &username;
         args->fog_username = &fog_username;
+        args->fri_username = &fri_username;
         args->fog_que_flag = &fog_que_flag;
         args->pri_chat_flag = &pri_chat_flag;
         args->chat_name_flag = &chat_name_flag;
+        args->get_file_flag = &get_file_flag;
         args->end_chat_flag = &end_chat_flag;
         args->end_start_flag = &end_start_flag;
         args->rl_display_flag = &rl_display_flag;
@@ -251,7 +260,7 @@ public:
                                 rl_display_flag = true;
                                 handle_pri_chat(username, fri_user, cfd, FTP_ctrl_cfd, &end_flag,
                                                 &FTP_data_stor_flag, &pri_chat_flag, client_num,
-                                                &recv_cond, &recv_lock, &file_path);
+                                                &recv_cond, &recv_lock, &file_path,&fri_username);
                                 rl_display_flag = false;
                                 pri_chat_flag = false;
                             }
@@ -342,6 +351,21 @@ public:
                             wait_user_continue();
                         break;
                     }
+                    case 5:{
+                        system("clear");
+                        rl_display_flag = true;
+                        handle_show_file(username, cfd,&fri_username);
+                        rl_display_flag = false;
+                        handle_pthread_wait(end_flag, &recv_cond, &recv_lock);
+                        if(get_file_flag){
+                            cout << "=============================================" << endl;
+                            rl_display_flag = true;
+                            handle_retr_file(FTP_ctrl_cfd,end_flag,&recv_lock,&fri_username,
+                                            &recv_cond,&FTP_data_retr_flag,&file_path);
+                            rl_display_flag = false;
+                        }else wait_user_continue();
+                        break;
+                    }
                     case 6:
                     {
                         system("clear");
@@ -367,6 +391,10 @@ public:
                         handle_pthread_wait(end_flag, &recv_cond, &recv_lock);
                         wait_user_continue();
                         break;
+                    }
+                    case 9:
+                    {
+                        
                     }
                     default:
                     {
@@ -395,6 +423,7 @@ private:
     bool FTP_data_retr_flag;
     bool end_flag;
     bool fog_que_flag;
+    bool get_file_flag;
     bool end_chat_flag;
     bool chat_name_flag;
     bool end_start_flag;
@@ -404,6 +433,7 @@ private:
     bool add_friend_req_flag;
     string client_num;
     string username;
+    string fri_username;
     string fog_username;
     recv_args *args;
     int start_choice;
@@ -440,35 +470,87 @@ private:
     static void *file_pool_func(void *args)
     {
         file_args *new_args = (file_args *)args;
+
         pthread_cond_wait(new_args->cond, new_args->lock);
+
         if (new_args->run_flag)
         {
             pthread_cond_wait(new_args->cond, new_args->lock);
+
             if (new_args->retr_flag)
             {
+                DIR* dirp;
+                char cur_path[MAXBUF];
+                char file_path[2*MAXBUF];
+                string file_name = new_args->file_path;
 
+                dirp = opendir("download");
+                if(dirp == nullptr)
+                    mkdir("download",0755);
+                getcwd(cur_path,LARGESIZE);
+                sprintf(file_path,"%s/%s/%s",cur_path,"download",file_name.c_str()); 
+                
+                int file_fd = open(file_path,O_CREAT|O_RDWR|O_TRUNC,0644);
+                if(file_fd == -1)
+                {
+                    perror("File open failed");
+                    close(new_args->FTP_data_cfd);
+                    return nullptr;
+                }
+                new_args->file_fd = file_fd;
                 pthread_cond_wait(new_args->cond, new_args->lock);
+
                 if (new_args->end_flag)
                 {
+                    char file_buf[MAXBUF];
+                    int file_recvcnt = 0;
+                    struct stat file_stat;
+
+                    usleep(50000);
+                    while(true)
+                    {
+                        if((file_recvcnt = recv(new_args->FTP_data_cfd,file_buf,MAXBUF-1,MSG_DONTWAIT)) == -1)
+                        {
+                            stat(file_path, &file_stat);
+                            if(file_stat.st_size == 0) continue;
+                            else break;
+                        }
+                        write(new_args->file_fd,file_buf,file_recvcnt);
+                        memset(file_buf,0,MAXBUF);
+                    }
+                    
+                    json send_json = {
+                        {"request",END_RETR},
+                        {"filename",new_args->file_path},
+                        {"sender",new_args->sender},
+                        {"receiver",new_args->receiver}
+                    };
+                    sendjson(send_json,new_args->chat_server_cfd);
+
+                    delete (*new_args->datafd_to_file_args)[new_args->FTP_data_cfd];
+                    (*new_args->datafd_to_file_args).erase(new_args->FTP_data_cfd);
                     close(new_args->FTP_data_cfd);
                 }
                 return nullptr;
             }
             if (new_args->stor_flag)
-            {
-                struct stat file_stat;
+            {   
+                string file_name;           
                 ssize_t file_size;
                 ssize_t send_size;
-                off_t off_set = 0;
+                off_t off_set = 0;   
+                struct stat file_stat;
 
                 int file_fd = open(new_args->file_path.c_str(), O_RDONLY);
-                if (file_fd < 0) {
+                if (file_fd < 0) 
+                {
                     perror("File open failed");
                     close(new_args->FTP_data_cfd);
                     return nullptr;
                 }
                 
-                if (stat(new_args->file_path.c_str(), &file_stat) < 0) {
+                if (stat(new_args->file_path.c_str(), &file_stat) < 0) 
+                {
                     perror("File stat failed");
                     close(file_fd);
                     close(new_args->FTP_data_cfd);
@@ -478,7 +560,8 @@ private:
                 file_size = file_stat.st_size;
                 ssize_t total_sent = 0;
                 
-                while (total_sent < file_size) {
+                while (total_sent < file_size) 
+                {
                     size_t chunk = (file_size - total_sent) > CHUNK_SIZE 
                                    ? CHUNK_SIZE 
                                    : (file_size - total_sent);
@@ -489,7 +572,8 @@ private:
                         if (errno == EAGAIN || errno == EWOULDBLOCK) {
                             usleep(10000);
                             continue;
-                        } else {
+                        }else
+                        {
                             perror("sendfile failed");
                             break;
                         }
@@ -508,17 +592,37 @@ private:
                 
                 usleep(50000);
                 shutdown(new_args->FTP_data_cfd, SHUT_WR);
+
                 char dummy;
                 recv(new_args->FTP_data_cfd, &dummy, 1, 0);
+
                 pthread_cond_wait(new_args->cond, new_args->lock);
+
                 if (new_args->end_flag)
                 {
+                    file_name = get_filename_safe(new_args->file_path);
+                    json send_json = {
+                        {"request",ADD_FILE},
+                        {"filename",file_name},
+                        {"sender",new_args->sender},
+                        {"receiver",new_args->receiver}
+                    };
+                    sendjson(send_json,new_args->chat_server_cfd);
+
                     delete (*new_args->datafd_to_file_args)[new_args->FTP_data_cfd];
                     (*new_args->datafd_to_file_args).erase(new_args->FTP_data_cfd);
+
                 }
                 return nullptr;
             }
+            if(!new_args->retr_flag && !new_args->stor_flag)
+            {
+                delete (*new_args->datafd_to_file_args)[new_args->FTP_data_cfd];
+                (*new_args->datafd_to_file_args).erase(new_args->FTP_data_cfd);
+                close(new_args->FTP_data_cfd);
+            }
         }
+        
         return nullptr;
     }
 
@@ -553,11 +657,6 @@ private:
                     }
                     else
                     {
-                        cout << "\r\033[K" << flush;
-                        cout << "FTP datafd 关闭: " << chk_fd << endl;
-                        rl_on_new_line();
-                        if (*new_args->rl_display_flag)
-                            rl_redisplay();
                         close(chk_fd);
                         epoll_ctl(new_args->epfd, EPOLL_CTL_DEL, chk_fd, NULL);
                         continue;
@@ -566,12 +665,7 @@ private:
                 else if (evlist[i].events & EPOLLIN)
                 {
                     if ((*new_args->datafd_to_file_args).count(chk_fd) > 0)
-                    {
-                        struct epoll_event ev;
-                        ev.events = EPOLLIN | EPOLLONESHOT;
-                        ev.data.fd = chk_fd;
-                        epoll_ctl(new_args->epfd, EPOLL_CTL_MOD, chk_fd, &ev);
-                        
+                    {                       
                         file_args *data_new_args = (*new_args->datafd_to_file_args)[chk_fd];
                         if (data_new_args->get_num_flag)
                         {
@@ -582,9 +676,11 @@ private:
                             {
                                 string name = get_filename_safe(new_args->file_path->c_str());
                                 json send_json = {
-                                    {"cmd","STOR"},
-                                    {"client_num",data_new_args->data_num},
-                                    {"filename",name}
+                                    {"cmd", "STOR"},
+                                    {"filename", name},  
+                                    {"client_num", data_new_args->data_num},                                    
+                                    {"sender", *new_args->username},
+                                    {"receiver", *new_args->fri_username}
                                 };
                                 sendjson(send_json,new_args->FTP_ctrl_cfd);
                                 new_args->file_pool->addtask(file_pool_func, data_new_args);
@@ -594,7 +690,9 @@ private:
                                 json send_json = {
                                     {"cmd","RETR"},
                                     {"client_num",data_new_args->data_num},
-                                    {"filen_path",new_args->file_path->c_str()}
+                                    {"filename",new_args->file_path->c_str()},
+                                    {"receiver",new_args->username->c_str()},
+                                    {"sender",new_args->fri_username->c_str()}
                                 };
                                 sendjson(send_json,new_args->FTP_ctrl_cfd);
                                 new_args->file_pool->addtask(file_pool_func, data_new_args);
@@ -637,6 +735,7 @@ private:
                         buffer.erase(0, 4 + msg_len);
 
                         json recvjson;
+                        
                         try
                         {
                             recvjson = json::parse(json_str);
@@ -646,11 +745,13 @@ private:
                             cerr << "JSON parse error\n";
                             continue;
                         }
+
                         if (recvjson["sort"] == REFLACT)
                         {
                             if (recvjson["request"] == SIGNIN)
                             {
-                                cout << recvjson["reflact"] << endl;
+                                string reflact = recvjson["reflact"];
+                                cout << reflact << endl;
                             }
                             else if (recvjson["request"] == LOGIN)
                             {
@@ -660,7 +761,8 @@ private:
                                     *new_args->end_chat_flag = false;
                                     *new_args->username = recvjson["username"];
                                 }
-                                cout << recvjson["reflact"] << endl;
+                                string reflact = recvjson["reflact"];
+                                cout << reflact << endl;
                             }
                             else if (recvjson["request"] == FORGET_PASSWORD)
                             {
@@ -668,10 +770,14 @@ private:
                                 {
                                     *new_args->fog_que_flag = true;
                                     *new_args->fog_username = recvjson["username"];
-                                    cout << "密保问题: " << recvjson["reflact"] << endl;
+                                    string reflact = recvjson["reflact"];
+                                    cout << "密保问题: " << reflact << endl;
                                 }
                                 else
-                                    cout << recvjson["reflact"] << endl;
+                                {
+                                    string reflact = recvjson["reflact"];
+                                    cout << reflact << endl;
+                                }
                             }
                             else if (recvjson["request"] == CHECK_ANS)
                             {
@@ -681,25 +787,30 @@ private:
                                     *new_args->end_chat_flag = false;
                                     *new_args->username = recvjson["username"];
                                 }
-                                cout << recvjson["reflact"] << endl;
+                                string reflact = recvjson["reflact"];
+                                cout << reflact << endl;
                             }
                             else if (recvjson["request"] == LOGOUT)
                             {
-                                cout << recvjson["reflact"] << endl;
+                                string reflact = recvjson["reflact"];
+                                cout << reflact << endl;
                             }
                             else if (recvjson["request"] == BREAK)
                             {
-                                cout << recvjson["reflact"] << endl;
+                                string reflact = recvjson["reflact"];
+                                cout << reflact << endl;
                             }
                             else if (recvjson["request"] == ADD_FRIEND)
                             {
-                                cout << recvjson["reflact"] << endl;
+                                string reflact = recvjson["reflact"];
+                                cout << reflact << endl;
                             }
                             else if (recvjson["request"] == GET_FRIEND_REQ)
                             {
                                 if (recvjson["do_flag"] == false)
                                 {
-                                    cout << recvjson["reflact"] << endl;
+                                    string reflact = recvjson["reflact"];
+                                    cout << reflact << endl;
                                 }
                                 else
                                 {
@@ -727,6 +838,7 @@ private:
                                 else
                                 {
                                     cout << reflact << endl;
+                                    *new_args->fri_username = recvjson["pri_username"];
                                     cout << "=============================================" << endl;
                                     *new_args->chat_name_flag = true;
                                 }
@@ -824,12 +936,16 @@ private:
                                     pool_file_args->stor_flag = true;
                                     pool_file_args->retr_flag = false;
                                     *new_args->FTP_data_stor_flag = false;
+                                    pool_file_args->sender = *new_args->username;
+                                    pool_file_args->receiver = *new_args->fri_username;
                                 }
                                 else if (*new_args->FTP_data_retr_flag) 
                                 {
                                     pool_file_args->stor_flag = false;
                                     pool_file_args->retr_flag = true;
                                     *new_args->FTP_data_retr_flag = false;
+                                    pool_file_args->receiver = *new_args->username;
+                                    pool_file_args->sender = *new_args->fri_username;
                                 }
                                 else
                                 {
@@ -845,8 +961,30 @@ private:
                                 epoll_ctl(new_args->epfd, EPOLL_CTL_ADD, datafd, &ev);
                                 send(datafd, new_args->client_num.c_str(), new_args->client_num.size() + 1, 0);
                             }
+                            else if(SHOW_FILE)
+                            {
+                                bool get_flag = recvjson["get_flag"];
+                                if(get_flag)
+                                {
+                                    json filenames = recvjson["reflact"];
+                                    cout << "可接收文件如下: " << endl;
+                                    for (size_t i = 0; i <filenames.size(); i++)
+                                    {
+                                        string name = filenames[i];
+                                        cout << "文件名称: " << name << endl;
+                                    }
+                                    *new_args->fri_username = recvjson["file_user"];
+                                    *new_args->get_file_flag = true;
+                                }
+                                else {
+                                    string reflact = recvjson["reflact"];
+                                    cout << reflact << endl;
+                                    new_args->fri_username->clear();
+                                }                              
+                            }
                             else
                             {
+
                             }
 
                             pthread_cond_signal(new_args->recv_cond);
@@ -943,7 +1081,8 @@ private:
                                 bool retr_flag = recvjson["retr_flag"];
                                 int data_num = recvjson["data_num"];
                                 cout << "\r\033[K" << flush;
-                                cout << recvjson["reflact"] << endl;
+                                string reflact = recvjson["reflact"];
+                                cout << reflact << endl;
                                 rl_on_new_line();
                                 if (*new_args->rl_display_flag)
                                     rl_redisplay();
@@ -968,6 +1107,14 @@ private:
                                 else
                                     file_pair->retr_flag = true;
                                 pthread_cond_signal(file_pair->cond);
+                            }
+                            else if(recvjson["request"] == ADD_FILE){
+                                string message = recvjson["message"];
+                                cout << "\r\033[K" << flush;
+                                cout << message << endl;
+                                rl_on_new_line();
+                                if (*new_args->rl_display_flag)
+                                    rl_redisplay();
                             }
                             else if (recvjson["request"] == STOR_START)
                             {
@@ -1027,7 +1174,16 @@ private:
                                 }
                                 if (end_flag)
                                     file_pair->end_flag = true;
+                                usleep(50000);
                                 pthread_cond_signal(file_pair->cond);
+                            }
+                            else if(END_RETR){
+                                string message = recvjson["message"];
+                                cout << "\r\033[K" << flush;
+                                cout << message << endl;
+                                rl_on_new_line();
+                                if (*new_args->rl_display_flag)
+                                    rl_redisplay();
                             }
                             continue;
                         }

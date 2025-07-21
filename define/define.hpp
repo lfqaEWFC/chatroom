@@ -30,6 +30,9 @@
 #define END_FILE 28
 #define START_FILE 29
 #define ADD_PRIVATE_FILE 30
+#define ADD_FILE 31
+#define SHOW_FILE 32
+#define END_RETR 33
 #define REFLACT 1000
 #define FTP_PORTNUM "2100"
 #define CHUNK_SIZE (1024*1024)

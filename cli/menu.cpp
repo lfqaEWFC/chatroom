@@ -28,6 +28,7 @@ void menu::chat_show(){
     cout << "6.黑名单操作" << endl;
     cout << "7.查询好友" << endl;
     cout << "8.删除好友" << endl;
+    cout << "9.创建群聊" << endl;
     cout << "后面的功能有待完善..." << endl;
 
     return;

@@ -185,7 +185,7 @@ void handle_history_pri(json *offline_pri,string username){
 
 void handle_pri_chat(string username,string fri_user,int cfd,int FTP_ctrl_cfd,bool* end_flag,
                      bool* FTP_stor_flag,bool* pri_flag,string client_num,
-                     pthread_cond_t *cond,pthread_mutex_t *mutex,string* file_path)
+                     pthread_cond_t *cond,pthread_mutex_t *mutex,string* file_path,string* fri_username)
 {   
     cout << "进入私聊模式，对方：" << fri_user << endl;
     cout << "提示：\n"
@@ -289,6 +289,7 @@ void handle_pri_chat(string username,string fri_user,int cfd,int FTP_ctrl_cfd,bo
                     {"to",fri_user}
                 };
                 sendjson(end, cfd);
+                fri_username->clear();
                 break;
             }
             else {
@@ -433,4 +434,57 @@ int handle_pasv(string reflact)
     }
 
     return data_cfd;
+}
+
+void handle_show_file(string username, int cfd, string* fri_username)
+{
+    char *fri_user;
+    char retr_show[MSGBUF];
+
+    strcpy(retr_show,"请输入对端用户或群组名称: ");
+    fri_user = readline(retr_show);
+
+    json send_json = {
+        {"request",SHOW_FILE},
+        {"fri_user",fri_user},
+        {"username",username}
+    };
+    sendjson(send_json,cfd);
+
+    *fri_username = fri_user;
+
+    return;
+}
+
+void handle_retr_file(int FTP_ctrl_cfd,bool endflag,pthread_mutex_t* mutex,string* fri_username,
+                      pthread_cond_t* cond,bool* FTP_retr_flag,string* file_name)
+{
+    int cfd = FTP_ctrl_cfd;
+    char fileshow[MSGBUF];
+
+    cout << "进入文件接收模式,输入EXIT退出" << endl;
+    while(true && !endflag){
+        strcpy(fileshow,"请输入文件名称: ");
+        char* filename = readline(fileshow);
+        if(strcmp(filename,"EXIT") == 0)
+        {
+            cout << "退出文件接收模式..." << endl;
+            wait_user_continue();
+            fri_username->clear();
+            return;
+        }
+        else
+        {
+            *file_name = filename;
+            json send_json = {
+                {"cmd","PASV"},
+                {"filename",filename}
+            };
+            sendjson(send_json,cfd);
+        }
+        *FTP_retr_flag = true;
+        handle_pthread_wait(endflag,cond,mutex);
+    }
+
+    return;
 }
