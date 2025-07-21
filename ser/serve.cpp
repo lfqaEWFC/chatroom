@@ -1281,7 +1281,7 @@ bool handle_add_file(json json_quest,json *reflact,unique_ptr<database>&db,unord
     }
 
     bool sql_chk = db->execute_sql("INSERT INTO private_message(sender, receiver, content) "
-                                   "VALUES('" +sender+ "','" +receiver+ "','"+sender+"向您发送了一个文件')");
+                                   "VALUES('" +sender+ "','" +receiver+ "','"+sender+"发送了一个文件')");
     if(sql_chk == false){
         cout << "INSERT failed" << endl;
         *reflact = {

@@ -31,6 +31,7 @@ typedef struct file_args
     int FTP_ctrl_cfd;
     int file_fd;
     int chat_server_cfd;
+    off_t retr_file_size;
     pthread_cond_t *cond;
     pthread_mutex_t *lock;
     unordered_map<int, file_args *> *datafd_to_file_args;
@@ -503,17 +504,22 @@ private:
                 if (new_args->end_flag)
                 {
                     char file_buf[MAXBUF];
-                    int file_recvcnt = 0;
+                    off_t file_recvcnt;
+                    off_t file_size = new_args->retr_file_size;
                     struct stat file_stat;
 
-                    usleep(50000);
                     while(true)
                     {
                         if((file_recvcnt = recv(new_args->FTP_data_cfd,file_buf,MAXBUF-1,MSG_DONTWAIT)) == -1)
                         {
                             stat(file_path, &file_stat);
-                            if(file_stat.st_size == 0) continue;
-                            else break;
+                            if(file_stat.st_size == 0)
+                            {
+                                usleep(10000);
+                                continue;             
+                            }else
+                                if(file_stat.st_size == file_size) break;
+                                        
                         }
                         write(new_args->file_fd,file_buf,file_recvcnt);
                         memset(file_buf,0,MAXBUF);
@@ -540,6 +546,7 @@ private:
                 ssize_t send_size;
                 off_t off_set = 0;   
                 struct stat file_stat;
+                string recvbuf[MSGBUF];
 
                 int file_fd = open(new_args->file_path.c_str(), O_RDONLY);
                 if (file_fd < 0) 
@@ -590,12 +597,6 @@ private:
                     cout << "incompleted transfer..." << endl;
                 }
                 
-                usleep(50000);
-                shutdown(new_args->FTP_data_cfd, SHUT_WR);
-
-                char dummy;
-                recv(new_args->FTP_data_cfd, &dummy, 1, 0);
-
                 pthread_cond_wait(new_args->cond, new_args->lock);
 
                 if (new_args->end_flag)
@@ -674,13 +675,17 @@ private:
                             data_new_args->data_num = atoi(in_num);
                             if (data_new_args->stor_flag)
                             {
+                                struct stat file_stat;
                                 string name = get_filename_safe(new_args->file_path->c_str());
+                                stat(new_args->file_path->c_str(),&file_stat);
+                                off_t file_size = file_stat.st_size;
                                 json send_json = {
                                     {"cmd", "STOR"},
                                     {"filename", name},  
                                     {"client_num", data_new_args->data_num},                                    
                                     {"sender", *new_args->username},
-                                    {"receiver", *new_args->fri_username}
+                                    {"receiver", *new_args->fri_username},
+                                    {"file_size",file_size}
                                 };
                                 sendjson(send_json,new_args->FTP_ctrl_cfd);
                                 new_args->file_pool->addtask(file_pool_func, data_new_args);
@@ -1104,8 +1109,10 @@ private:
                                     file_pair->retr_flag = false;
                                     close(file_pair->FTP_data_cfd);
                                 }
-                                else
+                                else{
                                     file_pair->retr_flag = true;
+                                    file_pair->retr_file_size = recvjson["file_size"];
+                                }
                                 pthread_cond_signal(file_pair->cond);
                             }
                             else if(recvjson["request"] == ADD_FILE){
@@ -1174,7 +1181,7 @@ private:
                                 }
                                 if (end_flag)
                                     file_pair->end_flag = true;
-                                usleep(50000);
+                                usleep(10000);
                                 pthread_cond_signal(file_pair->cond);
                             }
                             else if(END_RETR){

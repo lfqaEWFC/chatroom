@@ -26,6 +26,7 @@ typedef struct data_args{
     char clientnum[10];
     char retr_filename[64];
     char stor_filename[64];
+    off_t stor_filesize;
     bool stor_flag = false;
     bool retr_flag = false;
     int ctrl_pair_fd = 0;
@@ -615,7 +616,8 @@ class FTP{
                             {"request",RETR_START},
                             {"retr_flag",true},
                             {"data_num",data_num},
-                            {"reflact",sendbuf}  
+                            {"reflact",sendbuf},
+                            {"file_size",size_stat.st_size}  
                         };
                         sendjson(send_json,new_arg->fd);
                     }
@@ -638,6 +640,7 @@ class FTP{
                     string filename = recvjson["filename"];
                     string sender = recvjson["sender"];
                     string receiver = recvjson["receiver"];
+                    off_t file_size = recvjson["file_size"];
 
                     dirp = opendir("file_tmp");
                     if(dirp == nullptr)
@@ -645,9 +648,10 @@ class FTP{
                     getcwd(cur_path,LARGESIZE);                
                     sprintf(creat_name,"%s_to_%s-%s",sender.c_str(),receiver.c_str(),filename.c_str());
                     sprintf(open_path,"%s/%s/%s",cur_path,"file_tmp",creat_name);
-                    strcpy(my_data_pair->stor_filename,creat_name);
+                    strcpy(my_data_pair->stor_filename,open_path);
                             
                     my_data_pair->stor_filefd = open(open_path,O_CREAT|O_RDWR|O_TRUNC,0644);
+                    my_data_pair->stor_filesize = file_size;
                     if(my_data_pair->stor_filefd == -1)
                     {
                         send_json = {
@@ -749,21 +753,44 @@ class FTP{
             char *file_buf = new char[MAXBUF];
             int file_recvcnt = 0;
             data_args* prev_args = new_arg->data_args_list;
+            struct stat file_stat;    
 
-            while((file_recvcnt = recv(new_arg->fd,file_buf,MAXBUF-1,MSG_DONTWAIT)) != 0){
+            while(true){
+                file_recvcnt = recv(new_arg->fd,file_buf,MAXBUF-1,MSG_DONTWAIT);
                 write(new_arg->stor_filefd,file_buf,file_recvcnt);
                 memset(file_buf,0,MAXBUF);
+                if(file_recvcnt == -1){
+                    stat(new_arg->stor_filename,&file_stat);
+                    if(file_stat.st_size == new_arg->stor_filesize) break;
+                    if(file_stat.st_size == 0) continue;
+                }
+            }
+
+            if(file_stat.st_size == new_arg->stor_filesize){
+                send_json = {
+                    {"sort",MESSAGE},
+                    {"request",END_FILE},
+                    {"end_flag",true},
+                    {"data_num",new_arg->data_num},
+                    {"reflact","226 transfer completed"}
+                };
+                sendjson(send_json,new_arg->ctrl_pair_fd);
+                cout << "completely receive" << endl; 
+            }
+            else {
+                cout << "actural: " << file_stat.st_size << endl;
+                cout << "excepted: " << new_arg->stor_filesize << endl;
+                send_json = {
+                    {"sort",MESSAGE},
+                    {"request",END_FILE},
+                    {"end_flag",true},
+                    {"data_num",new_arg->data_num},
+                    {"reflact","550 Incomplete transfer."}
+                };
+                sendjson(send_json,new_arg->ctrl_pair_fd);
+                cout << "uncompletely receive" << endl;
             }
             
-            send_json = {
-                {"sort",MESSAGE},
-                {"request",END_FILE},
-                {"end_flag",true},
-                {"data_num",new_arg->data_num},
-                {"reflact","226 transfer completed"}
-            };
-            sendjson(send_json,new_arg->ctrl_pair_fd);
-
             auto it = new_arg->data_pairs.begin();
             for(;it!= new_arg->data_pairs.end();it++){
                 if(it->second->fd == new_arg->fd){
