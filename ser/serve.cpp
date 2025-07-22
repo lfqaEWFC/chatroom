@@ -1183,8 +1183,9 @@ bool handle_del_friend(json json_quest,json *reflact,unique_ptr<database>&db) {
     return true;
 }
 
-bool handle_add_file(json json_quest,json *reflact,unique_ptr<database>&db,unordered_map<int, string> cfd_to_user){
-
+bool handle_add_file(json json_quest,json *reflact,unique_ptr<database>&db,
+                     unordered_map<int, string> cfd_to_user,unordered_map<string,string> user_to_friend)
+{
     string sender = json_quest["sender"];
     string filename = json_quest["filename"];
     string receiver = json_quest["receiver"];
@@ -1230,11 +1231,22 @@ bool handle_add_file(json json_quest,json *reflact,unique_ptr<database>&db,unord
     for(;it != cfd_to_user.end();it++){
         if(it->second == receiver){
             int cfd = it->first;
-            json send_json = {
-                {"sort",MESSAGE},
-                {"request",NON_PEER_CHAT},
-                {"message","通知: 好友"+sender+"发送了一个文件"}
-            };
+            json send_json;
+            if(user_to_friend[receiver] == sender){
+                send_json = {
+                    {"sort",MESSAGE},
+                    {"request",PEER_CHAT},
+                    {"sender",sender},
+                    {"receiver",receiver},
+                    {"message",""+sender+" 发送了一个文件"} 
+                };
+            } else {
+                send_json = {
+                    {"sort",MESSAGE},
+                    {"request",NON_PEER_CHAT},
+                    {"message","通知: 好友"+sender+"发送了一个文件"}
+                };
+            }
             sendjson(send_json,cfd);
             break;
         }

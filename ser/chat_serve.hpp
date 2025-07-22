@@ -524,7 +524,7 @@ class serve{
                 }
                 case(ADD_FILE):{
                     json *reflact = new json;
-                    if(handle_add_file(json_quest,reflact,db,*new_args->cfd_to_user))
+                    if(handle_add_file(json_quest,reflact,db,*new_args->cfd_to_user,*new_args->user_to_friend))
                         sendjson(*reflact,new_args->cfd);
                     delete reflact;
                     break;

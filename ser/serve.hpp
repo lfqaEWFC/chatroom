@@ -25,6 +25,7 @@ bool handle_add_black(json json_quest,json *reflact,unique_ptr<database>&db);
 bool handle_rem_black(json json_quest,json *reflact,unique_ptr<database>&db);
 bool handle_check_friend(json json_quest,json *reflact,unique_ptr<database>&db,unordered_map<int, string>* cfd_to_user);
 bool handle_del_friend(json json_quest,json *reflact,unique_ptr<database>&db);
-bool handle_add_file(json json_quest,json *reflact,unique_ptr<database>&db,unordered_map<int, string> cfd_to_user);
+bool handle_add_file(json json_quest,json *reflact,unique_ptr<database>&db,
+                     unordered_map<int, string> cfd_to_user,unordered_map<string,string>user_to_friend);
 bool handle_show_file(json json_quest,json *reflact,unique_ptr<database>&db);
 bool handle_del_retr(json json_quest,json* reflact,unique_ptr<database>&db);
