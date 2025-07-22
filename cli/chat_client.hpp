@@ -481,15 +481,38 @@ private:
             if (new_args->retr_flag)
             {
                 DIR* dirp;
+                ssize_t file_cnt = 0;
+                dirent* dirent_name;
                 char cur_path[MAXBUF];
                 char file_path[2*MAXBUF];
+                char file_new_name[LARGESIZE];
                 string file_name = new_args->file_path;
 
                 dirp = opendir("download");
                 if(dirp == nullptr)
+                {
                     mkdir("download",0755);
+                    dirp = opendir("download");  // 重新打开
+                    if (dirp == nullptr) {
+                        perror("opendir failed");
+                        return nullptr;
+                    }
+                }
+                while((dirent_name = readdir(dirp)) != nullptr)
+                {
+                    if(strcmp(dirent_name->d_name,file_name.c_str()) == 0)
+                        file_cnt++;
+                }
+                closedir(dirp);
+
                 getcwd(cur_path,LARGESIZE);
-                sprintf(file_path,"%s/%s/%s",cur_path,"download",file_name.c_str()); 
+                if(file_cnt != 0)
+                {
+                    sprintf(file_new_name,"%s(%ld)",file_name.c_str(),file_cnt);
+                    sprintf(file_path,"%s/%s/%s",cur_path,"download",file_new_name); 
+                }
+                if(file_cnt == 0)
+                    sprintf(file_path,"%s/%s/%s",cur_path,"download",file_name.c_str()); 
                 
                 int file_fd = open(file_path,O_CREAT|O_RDWR|O_TRUNC,0644);
                 if(file_fd == -1)
