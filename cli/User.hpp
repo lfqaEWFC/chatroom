@@ -31,3 +31,4 @@ int handle_pasv(string reflact);
 void handle_show_file(string username, int cfd,string* fri_username);
 void handle_retr_file(int FTP_ctrl_cfd,bool endflag,pthread_mutex_t* mutex,string* fri_username,
                       pthread_cond_t* cond,bool* FTP_retr_flag,string* file_name);
+void handle_create_group(string username,int cfd);

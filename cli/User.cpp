@@ -489,4 +489,9 @@ void handle_retr_file(int FTP_ctrl_cfd,bool endflag,pthread_mutex_t* mutex,strin
     return;
 }
 
+void handle_create_group(string username,int cfd)
+{
+    
 
+    return;
+}

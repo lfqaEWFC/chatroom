@@ -395,7 +395,10 @@ public:
                     }
                     case 9:
                     {
-                        
+                        system("clear");
+                        rl_display_flag = true;
+                        handle_create_group(username,cfd);
+                        rl_display_flag = false;
                     }
                     default:
                     {

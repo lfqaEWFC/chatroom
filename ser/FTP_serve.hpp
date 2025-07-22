@@ -19,8 +19,8 @@ using namespace std;
 #define EPSIZE 1024
 #define CHUNK_SIZE (1024*1024)
 
-typedef struct data_args{
-
+typedef struct data_args
+{
     int fd = 0;
     int data_num;
     char clientnum[10];
@@ -36,8 +36,8 @@ typedef struct data_args{
     unordered_map<int,data_args*>data_pairs;  
 }data_args;
 
-typedef struct ctrl_args{
-
+typedef struct ctrl_args
+{
     int fd = 0;
     int epfd = 0;
     pool *data_pool;
@@ -50,16 +50,16 @@ typedef struct ctrl_args{
 }ctrl_args;
 
 
-class FTP{
-
+class FTP
+{
     public:
 
     FTP(ssize_t input_control_threads,ssize_t input_data_threads):
     control_threads(input_control_threads),
     data_threads(input_data_threads),
     listen_control_fd(-1),connect_fd(-1),epfd(-1),workfd_num(0),
-    running(false){
-
+    running(false)
+    {
         ctrl_pool = new pool(control_threads);
         data_pool = new pool(data_threads);
     }
@@ -89,8 +89,8 @@ class FTP{
         return;     
     }
 
-    void start(){
-
+    void start()
+    {
         while(running){
             workfd_num = epoll_wait(epfd,evlist,EPSIZE,-1);
             if(workfd_num == -1){
@@ -104,7 +104,8 @@ class FTP{
         }
     }
 
-    ~FTP(){
+    ~FTP()
+    {
         while(ctrl_args_list!= NULL){
             ctrl_args *prev = ctrl_args_list;
             ctrl_args_list = ctrl_args_list->next;
@@ -136,8 +137,8 @@ class FTP{
     struct epoll_event ev;
     struct epoll_event evlist[EPSIZE];
 
-    static int set_nonblocking(int fd) {
-
+    static int set_nonblocking(int fd) 
+    {
         int flags = fcntl(fd, F_GETFL, 0);
         if (flags == -1) {
             perror("fcntl F_GETFL");
@@ -151,10 +152,11 @@ class FTP{
         return 0;
     }
 
-    int handle_sort(epoll_event *evlist,int workfd_num){
-
+    int handle_sort(epoll_event *evlist,int workfd_num)
+    {
         for(int i=0;i<workfd_num;i++){
-            if (evlist[i].events & (EPOLLRDHUP | EPOLLERR)) {
+            if (evlist[i].events & (EPOLLRDHUP | EPOLLERR)) 
+            {
                 bool de_flag = true;
                 close(evlist[i].data.fd);
                 epoll_ctl(epfd, EPOLL_CTL_DEL, evlist[i].data.fd, NULL);
@@ -162,7 +164,8 @@ class FTP{
                 data_args *de_data = data_args_list;
                 ctrl_args *ctrl_prev = nullptr;
                 ctrl_args *de_ctrl = ctrl_args_list;
-                while(de_data != NULL){
+                while(de_data != NULL)
+                {
                     if(de_data->fd == evlist[i].data.fd){
                         auto it = de_data->data_pairs.begin();
                         for(;it!= de_data->data_pairs.end();it++){
@@ -216,29 +219,66 @@ class FTP{
                     return -1;
                 continue;
             }
-            else{
+            else
+            {
                 char* portnum;
                 portnum = new char[MAXBUF];
                 strcpy(portnum,isportnum(evlist[i].data.fd));
 
                 if(portnum == NULL)
                     return -1;
-                if(strcmp(portnum,"2100") == 0){
-                    ctrl_args *ctrl_inargs;
-                    ctrl_inargs = ctrl_args_list;
-                    while(ctrl_inargs != NULL){
-                        if(ctrl_inargs->fd == evlist[i].data.fd)
+                if(strcmp(portnum,"2100") == 0)
+                {
+                    ssize_t n;
+                    ctrl_args *new_arg;
+                    char recvbuf[MAXBUF];
+
+                    new_arg = ctrl_args_list;
+                    while(new_arg != NULL){
+                        if(new_arg->fd == evlist[i].data.fd)
                             break;
-                        ctrl_inargs = ctrl_inargs->next;
+                        new_arg = new_arg->next;
                     }
-                    if(ctrl_inargs == NULL){
+                    if(new_arg == NULL){
                         cout << "can not find ctrl_args" << endl;
                         return -1;
                     }
-                    ctrl_pool->addtask(ctrl_fun,(void*)ctrl_inargs);
-                    continue;
+
+                    while ((n = recv(new_arg->fd, recvbuf, MAXBUF, MSG_DONTWAIT)) > 0)
+                    {
+                        new_arg->buffer.append(recvbuf, n);
+                    }
+                    if (n == -1)
+                    {
+                        if (errno != EAGAIN && errno != EWOULDBLOCK)
+                        {
+                            perror("recv");
+                            return -1;
+                        }
+                    }
+            
+                    while (new_arg->buffer.size() >= 4)
+                    {
+            
+                        uint32_t net_len;
+                        memcpy(&net_len, new_arg->buffer.data(), 4);
+                        uint32_t msg_len = ntohl(net_len);
+                        if (msg_len == 0)
+                        {
+                            cerr << "异常消息长度: " << msg_len << endl;
+                            new_arg->buffer.clear();
+                            break;
+                        }
+                        if (new_arg->buffer.size() < 4 + msg_len)
+                            break;
+                        new_arg->json_str = new_arg->buffer.substr(4, msg_len);
+                        new_arg->buffer.erase(0, 4 + msg_len);
+                        ctrl_pool->addtask(ctrl_fun,(void*)new_arg);
+                        continue;
+                    }
                 }
-                else{
+                else
+                {
                     if(atoi(portnum)<=41024 && atoi(portnum)>=1024){              
                         int optval = 0;
                         socklen_t len = sizeof(optval);
@@ -276,8 +316,8 @@ class FTP{
         return 0;
     }
 
-    int handle_accept(int listen_fd,bool data_flag){
-
+    int handle_accept(int listen_fd,bool data_flag)
+    {
         connect_fd = accept(listen_fd,NULL,NULL);
         cout << "open : " << connect_fd << endl;
         if(connect_fd == -1){
@@ -395,299 +435,268 @@ class FTP{
         return 0;
     }
 
-    static void *ctrl_fun(void *args) {
-
-        char recvbuf[MAXBUF];
-        char sendbuf[MAXBUF];
-        ssize_t n;
+    static void *ctrl_fun(void *args)
+    {
         int data_num;
+        char sendbuf[MAXBUF];
         ctrl_args *new_arg = (ctrl_args*) args;
         data_args* my_data_pair = NULL;
-        cout << "recv" << endl;
-        while ((n = recv(new_arg->fd, recvbuf, MAXBUF, MSG_DONTWAIT)) > 0)
+        string json_str = new_arg->json_str;
+
+        json recvjson;
+        try
         {
-            new_arg->buffer.append(recvbuf, n);
+            recvjson = json::parse(json_str);
         }
-        if (n == -1)
+        catch (...)
         {
-            if (errno != EAGAIN && errno != EWOULDBLOCK)
-            {
-                perror("recv");
-                return nullptr;
-            }
+            cerr << "JSON parse error\n";
+            return nullptr;
         }
-        while (new_arg->buffer.size() >= 4)
+            
+        cout <<"cmd: " << recvjson["cmd"] << endl;
+        if(recvjson["cmd"] == "PASV")
         {
+            char portnum_str[MAXBUF]; 
+            char *result = new char[MAXBUF];
+            sockaddr_storage addr;
+            socklen_t len = sizeof(sockaddr_storage);
 
-            uint32_t net_len;
-            memcpy(&net_len, new_arg->buffer.data(), 4);
-            uint32_t msg_len = ntohl(net_len);
-            if (msg_len == 0)
-            {
-                cerr << "异常消息长度: " << msg_len << endl;
-                new_arg->buffer.clear();
-                break;
-            }
-            if (new_arg->buffer.size() < 4 + msg_len)
-                break;
-            string json_str = new_arg->buffer.substr(4, msg_len);
-            new_arg->buffer.erase(0, 4 + msg_len);
-
-            json recvjson;
-            try
-            {
-                recvjson = json::parse(json_str);
-            }
-            catch (...)
-            {
-                cerr << "JSON parse error\n";
-                continue;
-            }   
-            cout <<"cmd: " << recvjson["cmd"] << endl;
-            if(recvjson["cmd"] == "PASV")
-            {
-                char portnum_str[MAXBUF]; 
-                char *result = new char[MAXBUF];
-                sockaddr_storage addr;
-                socklen_t len = sizeof(sockaddr_storage);
-
-                srand(time(NULL));
-                int listen_data_portnum = rand()%40000+1024;
+            srand(time(NULL));
+            int listen_data_portnum = rand()%40000+1024;
+            sprintf(portnum_str,"%d",listen_data_portnum);
+            int listen_data_fd = inetlisten((const char*)portnum_str);
+            while(listen_data_fd == -1){
+                perror("inetlisten");
+                listen_data_portnum = rand()%40000+1024;
                 sprintf(portnum_str,"%d",listen_data_portnum);
-                int listen_data_fd = inetlisten((const char*)portnum_str);
-                while(listen_data_fd == -1){
-                    perror("inetlisten");
-                    listen_data_portnum = rand()%40000+1024;
-                    sprintf(portnum_str,"%d",listen_data_portnum);
-                    listen_data_fd = inetlisten((const char*)portnum_str);
-                }
-                set_nonblocking(listen_data_fd);
-
-                struct epoll_event ev;
-                ev.data.fd = listen_data_fd;
-                ev.events = EPOLLIN | EPOLLET;
-                epoll_ctl(new_arg->epfd,EPOLL_CTL_ADD,listen_data_fd,&ev);
-                        
-                getsockname(listen_data_fd,(sockaddr*)&addr,&len);
-                address_str_portnum(result,MAXBUF,(sockaddr*)&addr,len) == NULL;
-                const char delimiter[5] = "().,";
-                char *token;
-                char **res_token = new char*[10];
-                for(int i=0;i<10;i++){
-                    res_token[i] = new char[10];
-                }
-                int cnt = 0;
-                cout << result << endl;
-                token = strtok(result,delimiter);
-                while(token != NULL){
-                    res_token[cnt] = token;
-                    token = strtok(NULL,delimiter);
-                    cnt++;
-                }
-                sprintf(result,"(%s,%s,%s,%s,%d,%d)",res_token[0],res_token[1],res_token[2],res_token[3],atoi(res_token[4])/256,atoi(res_token[4])%256);
-                sprintf(sendbuf,"%s %s","227 entering passive mode",result);
-
-                string send_buf = sendbuf; 
-                json send_json = {
-                    {"sort",REFLACT},
-                    {"request",PASV_CMD},
-                    {"reflact",send_buf}
-                };
-                sendjson(send_json,new_arg->fd);
-
-                memset(sendbuf,0,sizeof(sendbuf));
-                memset(recvbuf,0,MAXBUF);
-                delete[] res_token;
-                free(result);
+                listen_data_fd = inetlisten((const char*)portnum_str);
             }
-            else 
-            {
-                if(recvjson["cmd"] == "LIST"){
+            set_nonblocking(listen_data_fd);
 
-                    char dirpath[MAXBUF];
-                    char dirmsg[MAXBUF];
-                    char tmp_buf[MAXBUF*2];
-                    char path[LARGESIZE];
-                    DIR *dirp;
+            struct epoll_event ev;
+            ev.data.fd = listen_data_fd;
+            ev.events = EPOLLIN | EPOLLET;
+            epoll_ctl(new_arg->epfd,EPOLL_CTL_ADD,listen_data_fd,&ev);
+                    
+            getsockname(listen_data_fd,(sockaddr*)&addr,&len);
+            address_str_portnum(result,MAXBUF,(sockaddr*)&addr,len) == NULL;
+            const char delimiter[5] = "().,";
+            char *token;
+            char **res_token = new char*[10];
+            for(int i=0;i<10;i++){
+                res_token[i] = new char[10];
+            }
+            int cnt = 0;
+            cout << result << endl;
+            token = strtok(result,delimiter);
+            while(token != NULL){
+                res_token[cnt] = token;
+                token = strtok(NULL,delimiter);
+                cnt++;
+            }
+            sprintf(result,"(%s,%s,%s,%s,%d,%d)",res_token[0],res_token[1],res_token[2],res_token[3],atoi(res_token[4])/256,atoi(res_token[4])%256);
+            sprintf(sendbuf,"%s %s","227 entering passive mode",result);
 
-                    if(recvjson["run_flag"] == false)
-                        getcwd(dirpath,sizeof(dirpath));
-                    else{
-                        string path = recvjson["path"];
-                        strcpy(dirpath,path.c_str());
-                    }
+            string send_buf = sendbuf; 
+            json send_json = {
+                {"sort",REFLACT},
+                {"request",PASV_CMD},
+                {"reflact",send_buf}
+            };
+            sendjson(send_json,new_arg->fd);
 
-                    dirp = opendir(dirpath);
-                    if(dirp == NULL){
-                        perror("opendir");
-                        json send_json = {
-                            {"sort",REFLACT},
-                            {"request",LIST_CMD},
-                            {"reflact","wrong dictory"}
-                        };
-                        cout << "sendjson" << endl;
-                        sendjson(send_json,new_arg->fd);
-                        return NULL;
-                    }                    
-                    struct dirent *file;
-                    while((file = readdir(dirp)) != NULL){
-                        if(strlen(dirmsg) == 0){
-                            strcpy(dirmsg,file->d_name);
-                            continue;
-                        }
-                        sprintf(tmp_buf,"%s %s",dirmsg,file->d_name);
-                        strncpy(dirmsg,tmp_buf,MAXBUF-1);
-                    }
-                    string send_dirmsg = dirmsg; 
+            memset(sendbuf,0,sizeof(sendbuf));
+            delete[] res_token;
+            free(result);
+        }
+        else 
+        {
+            if(recvjson["cmd"] == "LIST"){
+
+                char dirpath[MAXBUF];
+                char dirmsg[MAXBUF];
+                char tmp_buf[MAXBUF*2];
+                char path[LARGESIZE];
+                DIR *dirp;
+
+                if(recvjson["run_flag"] == false)
+                    getcwd(dirpath,sizeof(dirpath));
+                else{
+                    string path = recvjson["path"];
+                    strcpy(dirpath,path.c_str());
+                }
+
+                dirp = opendir(dirpath);
+                if(dirp == NULL){
+                    perror("opendir");
                     json send_json = {
                         {"sort",REFLACT},
                         {"request",LIST_CMD},
-                        {"reflact",send_dirmsg}
+                        {"reflact","wrong dictory"}
+                    };
+                    cout << "sendjson" << endl;
+                    sendjson(send_json,new_arg->fd);
+                    return NULL;
+                }                    
+                struct dirent *file;
+                while((file = readdir(dirp)) != NULL){
+                    if(strlen(dirmsg) == 0){
+                        strcpy(dirmsg,file->d_name);
+                        continue;
+                    }
+                    sprintf(tmp_buf,"%s %s",dirmsg,file->d_name);
+                    strncpy(dirmsg,tmp_buf,MAXBUF-1);
+                }
+                string send_dirmsg = dirmsg; 
+                json send_json = {
+                    {"sort",REFLACT},
+                    {"request",LIST_CMD},
+                    {"reflact",send_dirmsg}
+                };
+                sendjson(send_json,new_arg->fd);
+                
+                return NULL;
+            }
+
+            if((recvjson["cmd"] == "RETR") || (recvjson["cmd"] == "STOR"))
+            {
+                data_num = recvjson["client_num"];
+                cout << "pair: [" << data_num << "]" << endl;
+                cout << "cmd: [" << recvjson["cmd"] << "]" << endl;
+                if(new_arg->data_pairs.count(data_num) > 0)
+                    my_data_pair = new_arg->data_pairs[data_num];
+                if(my_data_pair == NULL){
+                    json send_json = {
+                        {"sort",MESSAGE},
+                        {"request",START_FILE},
+                        {"run_flag",false},
+                        {"data_num",data_num},
+                        {"reflact","can not find data pair"}
                     };
                     sendjson(send_json,new_arg->fd);
-                    
                     return NULL;
                 }
+                else{
+                    json send_json = {
+                        {"sort",MESSAGE},
+                        {"request",START_FILE},
+                        {"run_flag",true},
+                        {"data_num",data_num},
+                        {"reflact","pair success"}
+                    };
+                    sendjson(send_json,new_arg->fd);
+                }
+            }
 
-                if((recvjson["cmd"] == "RETR") || (recvjson["cmd"] == "STOR"))
+            if(recvjson["cmd"] == "RETR")
+            {
+                json send_json;
+                char cur_path[LARGESIZE];    
+                char open_path[MAXBUF];
+                char load_filename[LARGESIZE];
+                my_data_pair->retr_flag = true;
+
+                string sender = recvjson["sender"];
+                string filename = recvjson["filename"];
+                string receiver = recvjson["receiver"];
+                
+                getcwd(cur_path,LARGESIZE);
+                sprintf(load_filename,"%s_to_%s-%s",sender.c_str(),receiver.c_str(),filename.c_str());
+                sprintf(open_path,"%s/%s/%s",cur_path,"file_tmp",load_filename);
+                strcpy(my_data_pair->retr_filename,open_path);
+
+                if(open(my_data_pair->retr_filename,O_RDONLY,0644) == -1){
+                    send_json = {
+                        {"sort",MESSAGE},
+                        {"request",RETR_START},
+                        {"retr_flag",false},
+                        {"data_num",data_num},
+                        {"reflact","550 file not found or denied."}  
+                    };
+                    sendjson(send_json,new_arg->fd);
+                return NULL; 
+                }
+                else{
+                    struct stat size_stat;
+                    stat(my_data_pair->retr_filename,&size_stat);
+                    sprintf(sendbuf,"%s %s (%lld %s)","150 Opening BINARY mode data connection for",my_data_pair->retr_filename,(long long)size_stat.st_size,"bytes");
+                    send_json = {
+                        {"sort",MESSAGE},
+                        {"request",RETR_START},
+                        {"retr_flag",true},
+                        {"data_num",data_num},
+                        {"reflact",sendbuf},
+                        {"file_size",size_stat.st_size}  
+                    };
+                    sendjson(send_json,new_arg->fd);
+                }
+
+                new_arg->data_pool->addtask(data_fun,my_data_pair);
+
+                memset(sendbuf,0,sizeof(sendbuf));
+                return NULL;
+            }
+            else if(recvjson["cmd"] == "STOR")
+            {                   
+                DIR *dirp;
+                json send_json;
+                char cur_path[LARGESIZE];               
+                char creat_name[LARGESIZE];
+                char open_path[LARGESIZE*3];
+                                
+                my_data_pair->stor_flag = true;
+                
+                string filename = recvjson["filename"];
+                string sender = recvjson["sender"];
+                string receiver = recvjson["receiver"];
+                off_t file_size = recvjson["file_size"];
+
+                dirp = opendir("file_tmp");
+                if(dirp == nullptr)
+                    mkdir("file_tmp",0755);
+                getcwd(cur_path,LARGESIZE);                
+                sprintf(creat_name,"%s_to_%s-%s",sender.c_str(),receiver.c_str(),filename.c_str());
+                sprintf(open_path,"%s/%s/%s",cur_path,"file_tmp",creat_name);
+                strcpy(my_data_pair->stor_filename,open_path);
+                        
+                my_data_pair->stor_filefd = open(open_path,O_CREAT|O_RDWR|O_TRUNC,0644);
+                my_data_pair->stor_filesize = file_size;
+                if(my_data_pair->stor_filefd == -1)
                 {
-                    data_num = recvjson["client_num"];
-                    cout << "pair: [" << data_num << "]" << endl;
-                    cout << "cmd: [" << recvjson["cmd"] << "]" << endl;
-                    if(new_arg->data_pairs.count(data_num) > 0)
-                        my_data_pair = new_arg->data_pairs[data_num];
-                    if(my_data_pair == NULL){
-                        json send_json = {
-                            {"sort",MESSAGE},
-                            {"request",START_FILE},
-                            {"run_flag",false},
-                            {"data_num",data_num},
-                            {"reflact","can not find data pair"}
-                        };
-                        sendjson(send_json,new_arg->fd);
-                        return NULL;
-                    }
-                    else{
-                        json send_json = {
-                            {"sort",MESSAGE},
-                            {"request",START_FILE},
-                            {"run_flag",true},
-                            {"data_num",data_num},
-                            {"reflact","pair success"}
-                        };
-                        sendjson(send_json,new_arg->fd);
-                    }
-                }
-
-                if(recvjson["cmd"] == "RETR")
+                    send_json = {
+                        {"sort",MESSAGE},
+                        {"request",STOR_START},
+                        {"stor_flag",false},
+                        {"data_num",data_num},
+                        {"reflact","550 file not found or denied."}  
+                    };
+                    sendjson(send_json,new_arg->fd);
+                    return NULL;
+                }else
                 {
-                    json send_json;
-                    char cur_path[LARGESIZE];    
-                    char open_path[MAXBUF];
-                    char load_filename[LARGESIZE];
-                    my_data_pair->retr_flag = true;
-
-                    string sender = recvjson["sender"];
-                    string filename = recvjson["filename"];
-                    string receiver = recvjson["receiver"];
-                    
-                    getcwd(cur_path,LARGESIZE);
-                    sprintf(load_filename,"%s_to_%s-%s",sender.c_str(),receiver.c_str(),filename.c_str());
-                    sprintf(open_path,"%s/%s/%s",cur_path,"file_tmp",load_filename);
-                    strcpy(my_data_pair->retr_filename,open_path);
-
-                    if(open(my_data_pair->retr_filename,O_RDONLY,0644) == -1){
-                        send_json = {
-                            {"sort",MESSAGE},
-                            {"request",RETR_START},
-                            {"retr_flag",false},
-                            {"data_num",data_num},
-                            {"reflact","550 file not found or denied."}  
-                        };
-                        sendjson(send_json,new_arg->fd);
-                    return NULL; 
-                    }
-                    else{
-                        struct stat size_stat;
-                        stat(my_data_pair->retr_filename,&size_stat);
-                        sprintf(sendbuf,"%s %s (%lld %s)","150 Opening BINARY mode data connection for",my_data_pair->retr_filename,(long long)size_stat.st_size,"bytes");
-                        send_json = {
-                            {"sort",MESSAGE},
-                            {"request",RETR_START},
-                            {"retr_flag",true},
-                            {"data_num",data_num},
-                            {"reflact",sendbuf},
-                            {"file_size",size_stat.st_size}  
-                        };
-                        sendjson(send_json,new_arg->fd);
-                    }
-
-                    new_arg->data_pool->addtask(data_fun,my_data_pair);
-
-                    memset(sendbuf,0,sizeof(sendbuf));
-                    return NULL;
-                }
-                else if(recvjson["cmd"] == "STOR")
-                {                   
-                    DIR *dirp;
-                    json send_json;
-                    char cur_path[LARGESIZE];               
-                    char creat_name[LARGESIZE];
-                    char open_path[LARGESIZE*3];
-                                 
-                    my_data_pair->stor_flag = true;
-                    
-                    string filename = recvjson["filename"];
-                    string sender = recvjson["sender"];
-                    string receiver = recvjson["receiver"];
-                    off_t file_size = recvjson["file_size"];
-
-                    dirp = opendir("file_tmp");
-                    if(dirp == nullptr)
-                        mkdir("file_tmp",0755);
-                    getcwd(cur_path,LARGESIZE);                
-                    sprintf(creat_name,"%s_to_%s-%s",sender.c_str(),receiver.c_str(),filename.c_str());
-                    sprintf(open_path,"%s/%s/%s",cur_path,"file_tmp",creat_name);
-                    strcpy(my_data_pair->stor_filename,open_path);
-                            
-                    my_data_pair->stor_filefd = open(open_path,O_CREAT|O_RDWR|O_TRUNC,0644);
-                    my_data_pair->stor_filesize = file_size;
-                    if(my_data_pair->stor_filefd == -1)
-                    {
-                        send_json = {
-                            {"sort",MESSAGE},
-                            {"request",STOR_START},
-                            {"stor_flag",false},
-                            {"data_num",data_num},
-                            {"reflact","550 file not found or denied."}  
-                        };
-                        sendjson(send_json,new_arg->fd);
-                        return NULL;
-                    }else
-                    {
-                        sprintf(sendbuf,"%s %s","150 Opening BINARY mode data connection for",creat_name);
-                        send_json = {
-                            {"sort",MESSAGE},
-                            {"request",STOR_START},
-                            {"stor_flag",true},
-                            {"data_num",data_num},
-                            {"reflact",sendbuf}  
-                        };
-                        sendjson(send_json,new_arg->fd);
-                    }
-
-                    return NULL;
+                    sprintf(sendbuf,"%s %s","150 Opening BINARY mode data connection for",creat_name);
+                    send_json = {
+                        {"sort",MESSAGE},
+                        {"request",STOR_START},
+                        {"stor_flag",true},
+                        {"data_num",data_num},
+                        {"reflact",sendbuf}  
+                    };
+                    sendjson(send_json,new_arg->fd);
                 }
 
-                memset(recvbuf,0,MAXBUF);
-            }      
-        }   
+                return NULL;
+            }
+
+        }      
+         
         
         return NULL;
     }
 
-    static void *data_fun(void *args){
-
+    static void *data_fun(void *args)
+    {
         char recvbuf[MAXBUF];
         char sendbuf[MAXBUF];
         ssize_t n;
