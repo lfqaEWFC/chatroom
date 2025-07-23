@@ -10,7 +10,8 @@ bool handle_signin(json json_quest, unique_ptr<database> &db);
 bool handle_login(json json_quest, unique_ptr<database> &db, json *reflact,unordered_map<int, string> *cfd_to_user);
 bool handle_forget_password(json json_quest, unique_ptr<database> &db, json *reflact);
 bool handle_check_answer(json json_quest, unique_ptr<database> &db, json *reflact);
-bool handle_logout(json json_quest, unique_ptr<database> &db, json *reflact, unordered_map<int, string> *cfd_to_user);
+bool handle_logout(json json_quest, unique_ptr<database> &db, json *reflact,
+                   unordered_map<int, string> *cfd_to_user, unordered_map<string, int> *user_to_cfd);
 bool handle_break(json json_quest, unique_ptr<database> &db, json *reflact);
 bool handle_add_friend(json json_quest, unordered_map<int, string> *cfd_to_user, unique_ptr<database> &db, json *reflact);
 bool handle_get_offline(json json_quest, unique_ptr<database> &db, json *reflact);
@@ -29,3 +30,6 @@ bool handle_add_file(json json_quest,json *reflact,unique_ptr<database>&db,
                      unordered_map<int, string> cfd_to_user,unordered_map<string,string>user_to_friend);
 bool handle_show_file(json json_quest,json *reflact,unique_ptr<database>&db);
 bool handle_del_retr(json json_quest,json* reflact,unique_ptr<database>&db);
+bool handle_create_group(json json_quest,json* reflact,unique_ptr<database>&db);
+bool handle_select_group(json json_quest,json* reflact,unique_ptr<database>&db);
+bool handle_add_group(json json_quest,json* reflact,unique_ptr<database>&db,unordered_map<string,int> user_to_cfd);

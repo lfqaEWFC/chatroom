@@ -491,7 +491,62 @@ void handle_retr_file(int FTP_ctrl_cfd,bool endflag,pthread_mutex_t* mutex,strin
 
 void handle_create_group(string username,int cfd)
 {
-    
+    char* input;
+    char group_show[MSGBUF];
+    json send_json;
 
+    while(true)
+    {    
+        strcpy(group_show,"请输入创建的群聊名称： ");
+        input = readline(group_show);
+        if(strlen(input) > GROUP_LEN)
+        {
+            cout << "群聊名称过长，请重新输入...." << endl;
+            continue;
+        }
+        break;
+    }
+
+    send_json = {
+        {"request",CREATE_GROUP},
+        {"username",username},
+        {"group_name",input}
+    };
+    sendjson(send_json,cfd);
+
+    return;
+}
+
+void handle_addname_group(string username,int cfd,bool end_flag,bool* id_flag,
+                          pthread_cond_t* cond,pthread_mutex_t* mutex)
+{
+    char *input;
+    json send_json;
+    char name_show[LARGESIZE];
+    char id_show[LARGESIZE];
+    
+    strcpy(name_show,"请输入需要加入的群聊名称: ");
+    input = readline(name_show);
+    send_json = {
+        {"request",SEL_GROUP},
+        {"group_name",input}
+    };
+    sendjson(send_json,cfd);
+    handle_pthread_wait(end_flag,cond,mutex);
+    if(*id_flag)
+    {
+        strcpy(id_show,"请输入需要加入的群聊id: ");
+        input = readline(id_show);
+        send_json = {
+            {"request",ADD_GROUP},
+            {"group_id",atoi(input)},
+            {"username",username}
+        };
+        sendjson(send_json,cfd);
+        handle_pthread_wait(end_flag,cond,mutex);
+        *id_flag = false;
+    }
+    
+    wait_user_continue();
     return;
 }

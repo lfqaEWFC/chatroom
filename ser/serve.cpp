@@ -1,6 +1,11 @@
 #include "serve.hpp"
 
-bool handle_signin(json json_quest, unique_ptr<database> &db) {
+bool handle_signin(json json_quest, unique_ptr<database> &db) 
+{
+    string username = json_quest["username"];
+    string password = json_quest["password"];
+    string question = json_quest["que"];
+    string answer   = json_quest["ans"];
 
     MYSQL_RES* res = db->query_sql("SHOW TABLES LIKE 'user'");
     
@@ -19,12 +24,13 @@ bool handle_signin(json json_quest, unique_ptr<database> &db) {
         }        
     }
 
-    string username = json_quest["username"];
-    string password = json_quest["password"];
-    string question = json_quest["que"];
-    string answer   = json_quest["ans"];
+    res = db->query_sql("SELECT * FROM user WHERE username = '"+username+"'");
+    if(res == nullptr) return false;
+    int rows = mysql_num_rows(res);
+    if(rows > 0) return false;
 
-    string sql = "INSERT INTO user(username, password, que, ans) VALUES('" +username + "','" + password + "','" + question + "','" + answer + "')";
+    string sql = "INSERT INTO user(username, password, que, ans) "
+                 "VALUES('" +username + "','" + password + "','" + question + "','" + answer + "')";
 
     bool addchk = db->execute_sql(sql);
     if (!addchk) {
@@ -204,9 +210,18 @@ bool handle_check_answer(json json_quest,unique_ptr<database> &db,json *reflact)
     return false;
 }
 
-bool handle_logout(json json_quest, unique_ptr<database> &db, json *reflact, unordered_map<int, string>* cfd_to_user) {
+bool handle_logout(json json_quest, unique_ptr<database> &db, json *reflact,
+                   unordered_map<int, string> *cfd_to_user, unordered_map<string, int> *user_to_cfd)
+{
     
     string recv_username = json_quest["username"];
+
+    auto it_uc = user_to_cfd->find(recv_username);
+    if(it_uc != user_to_cfd->end())
+    {
+        user_to_cfd->erase(it_uc);
+        cout << "delete user_to_cfd" << endl;
+    }
 
     for (auto it = cfd_to_user->begin(); it != cfd_to_user->end(); ++it) {
         if (it->second == recv_username) {
@@ -448,6 +463,7 @@ bool handle_get_offline(json json_quest,unique_ptr<database> &db,json *reflact){
     const string user = json_quest["username"];
     const string fri_key = "offline:friend_req:" + user;
     const string pri_key = "offline:private:" + user;
+    const string gad_key = "offline:group_add:" + user;
 
     redisReply *reply = db->execRedis("LRANGE "+fri_key+" 0 -1");
     if (!reply) {
@@ -496,6 +512,26 @@ bool handle_get_offline(json json_quest,unique_ptr<database> &db,json *reflact){
         }
     }
 
+    freeReplyObject(reply);
+    reply = db->execRedis("HGETALL "+gad_key+"");
+    if (reply->type == REDIS_REPLY_ERROR) {
+        string err = reply->str;
+        *reflact = {
+            {"sort", ERROR},
+            {"reflact", "Redis 错误: " + err}
+        };
+        freeReplyObject(reply);
+        return true;
+    }
+    if (reply && reply->type == REDIS_REPLY_ARRAY) {
+        for (size_t i = 0; i+1 < reply->elements; i += 2) {
+            string group_id = reply->element[i]->str;
+            string count = reply->element[i + 1]->str;
+            string line = "gid 为 " + group_id + " 的群组有 " + count + " 条加群申请";
+            arr.push_back(line);
+        }
+    }
+
     *reflact = {
         {"sort", MESSAGE},
         {"request", GET_OFFLINE_MSG},
@@ -505,7 +541,8 @@ bool handle_get_offline(json json_quest,unique_ptr<database> &db,json *reflact){
 
     redisReply* del_reply = db->execRedis("DEL "+fri_key+"");
     redisReply* del_pri = db->execRedis("DEL "+pri_key+"");
-    if((del_reply == nullptr) || (del_pri == nullptr)){
+    redisReply* del_gad = db->execRedis("DEL "+gad_key+"");
+    if((del_reply == nullptr) || (del_pri == nullptr) || (del_gad == nullptr)){
         cerr << "Main Redis DB DEL "+fri_key+" Error" << endl;
         freeReplyObject(reply);
         freeReplyObject(del_reply);
@@ -836,7 +873,8 @@ bool handle_private_chat(json json_quest,unique_ptr<database> &db,json *reflact,
             return true;
         }
 
-        bool sql_chk = db->execute_sql("INSERT INTO private_message(sender, receiver, content) VALUES('" +sender+ "','" +receiver+ "','"+message+"')");
+        bool sql_chk = db->execute_sql("INSERT INTO private_message(sender, receiver, content) "
+                                       "VALUES('" +sender+ "','" +receiver+ "','"+message+"')");
         if(sql_chk == false){
             cout << "INSERT failed" << endl;
             *reflact = {
@@ -1190,7 +1228,7 @@ bool handle_add_file(json json_quest,json *reflact,unique_ptr<database>&db,
     string filename = json_quest["filename"];
     string receiver = json_quest["receiver"];
 
-    MYSQL_RES *res = db->query_sql("SHOW TABLEs LIKE 'private_file'");
+    MYSQL_RES *res = db->query_sql("SHOW TABLES LIKE 'private_file'");
     if(res == nullptr){
         cout << "SHOW failed" << endl;
         *reflact = {
@@ -1390,5 +1428,356 @@ bool handle_del_retr(json json_quest,json* reflact,unique_ptr<database>&db){
         {"message","文件 "+filename+" 下载完成..."}
     };
 
+    return true;
+}
+
+bool handle_create_group(json json_quest,json* reflact,unique_ptr<database>&db)
+{
+    long group_id = 0;
+    bool sqlchk1 = true;
+    bool sqlchk2 = true;
+    MYSQL_ROW row;
+    MYSQL_RES *res = nullptr;
+    string username = json_quest["username"];
+    string group_name = json_quest["group_name"];
+
+    res = db->query_sql("SHOW TABLES LIKE 'groups'");
+    if(res == nullptr){
+        cout << "SHOW failed" << endl;
+        *reflact = {
+            {"sort",ERROR},
+            {"reflact","MYSQL SHOW ERROR..."}
+        };
+        db->free_result(res);
+        return true; 
+    }
+
+    if(mysql_num_rows(res) <= 0)
+    {
+        sqlchk1 = db->execute_sql(
+            "CREATE TABLE `groups` ("
+            "group_id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '群组唯一ID', "
+            "name VARCHAR(64) NOT NULL COMMENT '群名', "
+            "owner_name VARCHAR(64) DEFAULT NULL COMMENT '群主用户ID', "
+            "created_at DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间', "
+            "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '最后更新时间', "
+            "CONSTRAINT fk_owner "
+            "   FOREIGN KEY (owner_name) "
+            "   REFERENCES user(username) "
+            "   ON DELETE SET NULL "
+            "   ON UPDATE CASCADE"
+            ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='群组信息表';"
+        );
+    }
+
+    res = db->query_sql("SHOW TABLES LIKE 'group_members'");
+    if(res == nullptr){
+        cout << "SHOW failed" << endl;
+        *reflact = {
+            {"sort",ERROR},
+            {"reflact","MYSQL SHOW ERROR..."}
+        };
+        db->free_result(res);
+        return true; 
+    }
+
+    if(mysql_num_rows(res) <= 0)
+    {
+        sqlchk2 = db->execute_sql(
+            "CREATE TABLE group_members ("
+            "id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键ID',"
+            "group_id BIGINT NOT NULL COMMENT '群组ID',"
+            "username VARCHAR(64) NOT NULL COMMENT '用户名称',"
+            "status BOOL NOT NULL COMMENT '添加状态',"
+            "role ENUM('owner','admin','member') DEFAULT 'member' COMMENT '群内角色',"
+            "joined_at DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '加入时间',"
+        
+            "CONSTRAINT fk_group_members_group "
+            "   FOREIGN KEY (group_id) "
+            "   REFERENCES `groups`(group_id) "
+            "   ON DELETE CASCADE "
+            "   ON UPDATE CASCADE,"
+        
+            "CONSTRAINT fk_group_members_user "
+            "   FOREIGN KEY (username) "
+            "   REFERENCES user(username) "
+            "   ON DELETE CASCADE "
+            "   ON UPDATE CASCADE,"
+        
+            "UNIQUE KEY uk_group_user (group_id, username)"
+            ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='群成员表';"
+        );
+    }
+    
+    if(sqlchk1 == false || sqlchk2 == false)
+    {
+        *reflact = {
+            {"sort",ERROR},
+            {"reflact","MYSQL CREATE ERROR..."}
+        };
+        db->free_result(res);
+        return true;
+    }
+
+    res =  db->query_sql("SELECT * FROM `groups` WHERE name = '"+group_name+"' AND owner_name = '"+username+"'");
+    if(res == nullptr)
+    {
+        *reflact = {
+            {"sort",ERROR},
+            {"reflact","MYSQL SELECT ERROR..."}
+        };
+        db->free_result(res);
+        return true;
+    }
+    uint64_t rows = mysql_num_rows(res);
+    if(rows > 0)
+    {
+        *reflact = {
+            {"sort",REFLACT},
+            {"request",CREATE_GROUP},
+            {"reflact","创建群名重复，请重新命名创建..."}
+        };
+        db->free_result(res);
+        return true;
+    }
+    sqlchk1 = db->execute_sql("INSERT INTO `groups`(name, owner_name) "
+                              "VALUES('"+group_name+"','"+username+"')");
+    if(sqlchk1 == false){
+        *reflact = {
+            {"sort",ERROR},
+            {"reflact","MYSQL INSERT ERROR..."}
+        };
+        db->free_result(res);
+        return true;
+    }
+
+    res = db->query_sql("SELECT LAST_INSERT_ID();");
+
+    if(res == nullptr)
+    {
+        *reflact = {
+            {"sort",ERROR},
+            {"reflact","MYSQL SELECT ERROR..."}
+        };
+        db->free_result(res);
+        return true;
+    }
+
+    row = mysql_fetch_row(res);
+
+    if(row == nullptr)
+    {
+        *reflact = {
+            {"sort",REFLACT},
+            {"request",CREATE_GROUP},
+            {"reflact","group not found..."}
+        };
+        db->free_result(res);
+        return true;
+    }
+    group_id = atoi(row[0]);
+
+    sqlchk1 = db->execute_sql("INSERT INTO group_members(group_id,username,role,status) "
+                              "VALUES("+to_string(group_id)+",'"+username+"','owner',true)");
+    if(sqlchk1 == false){
+        *reflact = {
+            {"sort",ERROR},
+            {"reflact","MYSQL INSERT ERROR..."}
+        };
+        db->free_result(res);
+        return true;
+    }
+
+    *reflact = {
+        {"sort",REFLACT},
+        {"request",CREATE_GROUP},
+        {"reflact","群聊 "+group_name+" 创建成功..."}
+    } ;
+
+    db->free_result(res);
+    return true;
+}
+ 
+bool handle_select_group(json json_quest,json* reflact,unique_ptr<database>&db)
+{
+    MYSQL_ROW row;
+    string group_name = json_quest["group_name"];
+
+    MYSQL_RES *res = db->query_sql("SELECT group_id,owner_name FROM `groups` WHERE name = '"+group_name+"'");
+    if(res == nullptr)
+    {
+        *reflact = {
+            {"sort",ERROR},
+            {"reflact","MYSQL SELECT ERROR..."}
+        };
+        db->free_result(res);
+        return true;
+    }
+    uint64_t rows = mysql_num_rows(res);
+    if(rows<=0)
+    {
+        *reflact = {
+            {"sort",REFLACT},
+            {"request",SEL_GROUP},
+            {"id_flag",false},
+            {"reflact","未搜索到相关群聊，请输入正确的群聊名称..."}
+        };
+        db->free_result(res);
+        return true;
+    }
+
+    json sel_groups = json::array();
+    while((row = mysql_fetch_row(res)) != nullptr)
+    {
+        int group_id = atoi(row[0]);
+        string owner_name = row[1];
+        json msg = {
+            {"group_id",group_id},
+            {"owner_name",owner_name}
+        };
+        sel_groups.push_back(msg);
+    }
+    *reflact = {
+        {"sort",REFLACT},
+        {"request",SEL_GROUP},
+        {"id_flag",true},
+        {"sel_groups",sel_groups}
+    };
+
+    db->free_result(res);
+    return true;
+}
+
+bool handle_add_group(json json_quest,json* reflact,unique_ptr<database>&db,
+                      unordered_map<string,int> user_to_cfd)
+{
+    int group_id = json_quest["group_id"];
+    string username = json_quest["username"];
+    bool sqlchk = true;
+    MYSQL_RES* res;
+    MYSQL_ROW row;
+    uint64_t rows;
+
+    res = db->query_sql("SELECT * FROM  group_members "
+                        "WHERE group_id = "+to_string(group_id)+" AND username = '"+username+"';");
+    if(res == nullptr)
+    {
+        *reflact = {
+            {"sort",ERROR},
+            {"reflact","MYSQL SELECT ERROR..."}
+        };
+        db->free_result(res);
+        return true;
+    }
+    rows = mysql_num_rows(res);
+    if(rows > 0)
+    {
+        *reflact = {
+            {"sort",REFLACT},
+            {"request",ADD_GROUP},
+            {"reflact","您已经加入了群聊，请勿重复添加..."}
+        };
+        db->free_result(res);
+        return true;
+    }
+
+    res = db->query_sql("SELECT username FROM group_members WHERE"
+                        "(group_id = "+to_string(group_id)+" AND role = 'owner') OR "
+                        "(group_id = "+to_string(group_id)+" AND role = 'admin')");
+    if(res == nullptr)
+    {
+        *reflact = {
+            {"sort",ERROR},
+            {"reflact","MYSQL SELECT ERROR..."}
+        };
+        db->free_result(res);
+        return true;
+    }
+    rows = mysql_num_rows(res);
+    if(rows <= 0)
+    {
+        *reflact = {
+            {"sort",REFLACT},
+            {"request",ADD_GROUP},
+            {"reflact","查询群信息结果为空,群id有误..."}
+        };
+        db->free_result(res);
+        return true;
+    }
+    while((row = mysql_fetch_row(res)) != nullptr)
+    {
+        string admin = row[0];
+        auto it = user_to_cfd.find(admin);
+        if(it == user_to_cfd.end())
+        {
+            bool redis_chk = true;
+            string redis_key = "offline:group_add:" + admin;
+            redisReply *reply = db->execRedis("HEXISTS "+redis_key+" "+to_string(group_id)+"");
+            if(reply == nullptr) redis_chk = false;
+            else if(reply->type == REDIS_REPLY_INTEGER){
+                if(reply->integer == 1){
+                    freeReplyObject(reply);
+                    cout << "increasing..." << endl;
+                    reply = db->execRedis("HINCRBY "+redis_key+" "+to_string(group_id)+" 1");
+                    if(reply == nullptr) redis_chk = false;
+                }
+                else{
+                    freeReplyObject(reply);
+                    cout << "setting..." << endl;
+                    reply = db->execRedis("HSET "+redis_key+" "+to_string(group_id)+" 1");
+                    if(reply == nullptr) redis_chk = false;
+                }
+            }
+            else{
+                freeReplyObject(reply);
+                cout << "redis reply type is wrong" << endl;
+                *reflact = {
+                    {"sort",ERROR}, 
+                    {"reflact","redis reply type is wrong"}
+                };
+                db->free_result(res);
+                return true;
+            }
+            if(!redis_chk){
+                cout << "redis hash wrong" << endl;
+                *reflact = {
+                    {"sort",ERROR}, 
+                    {"reflact","redis hash wrong"}
+                };
+                db->free_result(res);
+                return true;
+            }
+            if (reply) freeReplyObject(reply); 
+        }
+        else
+        {
+            int cfd = it->second;
+            json send_json;
+            send_json = {
+                {"sort",MESSAGE},
+                {"request",ADD_GROUP},
+                {"message","你有一条新的加群申请等待处理...."}
+            };
+            sendjson(send_json,cfd);
+        }
+    }
+
+    sqlchk = db->execute_sql("INSERT INTO group_members(group_id,username,role,status) "
+                             "VALUES("+to_string(group_id)+",'"+username+"','member',false)");
+    if (!sqlchk) {
+        *reflact = {
+            {"sort",ERROR},
+            {"reflact","MYSQL INSERT ERROR..."}
+        };
+        return true;
+    }
+                            
+    *reflact = {    
+        {"sort",REFLACT},
+        {"request",ADD_GROUP},
+        {"reflact"," 加群申请发送成功，等待处理中...."}
+    };
+
+    db->free_result(res);
     return true;
 }

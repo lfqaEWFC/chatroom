@@ -21,7 +21,7 @@ void menu::chat_show(){
 
     cout << "请输入选项" << endl;
     cout << "1.退出登录" << endl;
-    cout << "2.私聊" << endl;
+    cout << "2.私聊模式" << endl;
     cout << "3.发送好友请求" << endl;
     cout << "4.查看好友请求" << endl;
     cout << "5.接受文件" << endl;
@@ -29,6 +29,10 @@ void menu::chat_show(){
     cout << "7.查询好友" << endl;
     cout << "8.删除好友" << endl;
     cout << "9.创建群聊" << endl;
+    cout << "10.加入群聊" << endl;
+    cout << "11.群聊模式" << endl;
+    cout << "12.查看加群申请" << endl;
+    cout << "13.查看群聊列表" << endl;
     cout << "后面的功能有待完善..." << endl;
 
     return;

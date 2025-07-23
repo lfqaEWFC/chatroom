@@ -33,6 +33,10 @@
 #define ADD_FILE 31
 #define SHOW_FILE 32
 #define END_RETR 33
+#define CREATE_GROUP 34
+#define SEL_GROUP 35
+#define ADD_GROUP 36
+#define GROUP_LEN 32
 #define REFLACT 1000
 #define FTP_PORTNUM "2100"
 #define CHUNK_SIZE (1024*1024)

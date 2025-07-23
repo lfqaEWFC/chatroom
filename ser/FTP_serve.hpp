@@ -771,7 +771,7 @@ class FTP
                 if(file_recvcnt == -1){
                     stat(new_arg->stor_filename,&file_stat);
                     if(file_stat.st_size == new_arg->stor_filesize) break;
-                    if(file_stat.st_size == 0) continue;
+                    usleep(100);
                 }
             }
 

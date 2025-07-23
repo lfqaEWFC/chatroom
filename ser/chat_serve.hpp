@@ -21,6 +21,7 @@ typedef struct reactargs{
     queue<int> pending_fds;  
     mutex queue_mutex;
     unordered_map<int, string>* cfd_to_user;
+    unordered_map<string ,int>* user_to_cfd;
     unordered_map<int, string>* cfd_to_buffer;
     unordered_map<string, string>* user_to_friend;      
 } reactargs;
@@ -29,6 +30,7 @@ typedef struct handle_recv_args{
     int cfd;
     string json_str;
     unordered_map<int, string>* cfd_to_user;
+    unordered_map<string, int>* user_to_cfd;
     unordered_map<string, string>* user_to_friend;
 }handle_recv_args;
 
@@ -87,11 +89,14 @@ class serve{
             }
             
             for(int i = 0; i < lep_cnt; i++) {
-                if(levlist[i].data.fd == lfd) {
-                    while(true) {
+                if(levlist[i].data.fd == lfd) 
+                {
+                    while(true) 
+                    {
                         cfd = accept(lfd, nullptr, nullptr);
                         if(cfd < 0) {
-                            if(errno == EAGAIN || errno == EWOULDBLOCK) {
+                            if(errno == EAGAIN || errno == EWOULDBLOCK) 
+                            {
                                 break;
                             }
                             perror("accept");
@@ -100,7 +105,8 @@ class serve{
 
                         set_nonblocking(cfd);
 
-                        if(creatflag){
+                        if(creatflag)
+                        {
                             init_reactors();
                             creatflag = false;
                         }
@@ -129,17 +135,21 @@ class serve{
 
     private:
 
-        void init_reactors() {
+        void init_reactors() 
+        {
             struct epoll_event ev;
-            for(int i = 0; i < REACTSIZE; i++) {
+            for(int i = 0; i < REACTSIZE; i++) 
+            {
                 reactarr[i].cefd = epoll_create(EPSIZE);
                 reactarr[i].cnt = 0;
                 reactarr[i].eventfd = eventfd(0, EFD_NONBLOCK);
                 reactarr[i].handle_recv = handle_recv;
                 reactarr[i].cfd_to_user = &cfd_to_user;
+                reactarr[i].user_to_cfd = &user_to_cfd;
                 reactarr[i].cfd_to_buffer = &cfd_to_buffer;
                 reactarr[i].user_to_friend = &user_to_friend;
-                if(reactarr[i].cefd == -1) {
+                if(reactarr[i].cefd == -1) 
+                {
                     perror("epoll_create");
                     startflag = false;
                     return;
@@ -151,17 +161,20 @@ class serve{
             }
         }
         
-        int find_least_loaded() {
+        int find_least_loaded() 
+        {
             int min_idx = 0;
             for(int i = 1; i < REACTSIZE; i++) {
-                if(reactarr[i].cnt < reactarr[min_idx].cnt) {
+                if(reactarr[i].cnt < reactarr[min_idx].cnt) 
+                {
                     min_idx = i;
                 }
             }
             return min_idx;
         }
         
-        void assign_connection(int cfd, int idx) {
+        void assign_connection(int cfd, int idx) 
+        {
             reactargs& target = reactarr[idx];
             {
                 lock_guard<mutex> lock(target.queue_mutex);
@@ -184,14 +197,16 @@ class serve{
 
                 int n = epoll_wait(pthargs->cefd, evlist, EPSIZE, -1);
 
-                if(n < 0) {
+                if(n < 0) 
+                {
                     perror("epoll_wait");
                     continue;
                 }
                 
-                for(int i = 0; i < n; i++){
-
-                    if(evlist[i].data.fd == pthargs->eventfd) {
+                for(int i = 0; i < n; i++)
+                {
+                    if(evlist[i].data.fd == pthargs->eventfd) 
+                    {
                         uint64_t count;
                         while(read(pthargs->eventfd, &count, sizeof(count)) > 0);
                         
@@ -201,14 +216,16 @@ class serve{
                             temp_queue.swap(pthargs->pending_fds);
                         }
                         
-                        while(!temp_queue.empty()) {
+                        while(!temp_queue.empty()) 
+                        {
                             int fd = temp_queue.front();
                             temp_queue.pop();
                             
                             struct epoll_event ev;
                             ev.data.fd = fd;
                             ev.events = EPOLLIN | EPOLLET | EPOLLRDHUP ;
-                            if (epoll_ctl(pthargs->cefd, EPOLL_CTL_ADD, fd, &ev) == -1) {
+                            if (epoll_ctl(pthargs->cefd, EPOLL_CTL_ADD, fd, &ev) == -1) 
+                            {
                                 perror("epoll_ctl ADD");
                                 close(fd);
                                 {
@@ -221,7 +238,8 @@ class serve{
                         continue;
                     }
                     
-                    if(evlist[i].events & (EPOLLHUP | EPOLLERR | EPOLLRDHUP)) {
+                    if(evlist[i].events & (EPOLLHUP | EPOLLERR | EPOLLRDHUP)) 
+                    {
                         close(evlist[i].data.fd);
                         cout << "close : " << evlist[i].data.fd << endl;
                         epoll_ctl(pthargs->cefd, EPOLL_CTL_DEL, evlist[i].data.fd, nullptr);
@@ -230,17 +248,27 @@ class serve{
                             auto it = pthargs->cfd_to_user->find(evlist[i].data.fd);
                             auto del_buffer = pthargs->cfd_to_buffer->find(evlist[i].data.fd);
                             static thread_local unique_ptr<database> db = nullptr;
-                            if(del_buffer != pthargs->cfd_to_buffer->end()){
+                            if(del_buffer != pthargs->cfd_to_buffer->end())
+                            {
                                 cout << "delete cfd_to_buffer" << endl;
                                 pthargs->cfd_to_buffer->erase(del_buffer);
                             }
-                            if(it != pthargs->cfd_to_user->end()){
+                            if(it != pthargs->cfd_to_user->end())
+                            {
                                 string username = it->second;
                                 cout << "delete cfd_to_user" << endl;
                                 pthargs->cfd_to_user->erase(it);
-                                if (!db) {
+                                auto it_fd = pthargs->user_to_cfd->find(username);
+                                if(it_fd != pthargs->user_to_cfd->end())
+                                {
+                                    cout << "delete user_to_cfd" << endl;
+                                    pthargs->user_to_cfd->erase(it_fd);
+                                }   
+                                if (!db) 
+                                {
                                     db = make_unique<database>("localhost", 0, "root", nullptr, "chat_database", "localhost", 6379);
-                                    if (!db->is_connected()) {
+                                    if (!db->is_connected()) 
+                                    {
                                         cerr << "React Redis DB connect error" << endl;
                                     }
                                 }
@@ -251,23 +279,29 @@ class serve{
                         continue;
                     }
                     
-                    if(evlist[i].events & EPOLLIN) {
-                        cout << "epoll_in" << endl;
+                    if(evlist[i].events & EPOLLIN) 
+                    {
                         handle_recv_args *args = new handle_recv_args;
                         args->cfd = evlist[i].data.fd;
                         args->user_to_friend = pthargs->user_to_friend;
                         args->cfd_to_user = pthargs->cfd_to_user;
-                        while(true){
+                        args->user_to_cfd = pthargs->user_to_cfd;
+
+                        while(true)
+                        {
                             int n;
                             char rec_quest[MAXBUF];
                             string& buffer = (*pthargs->cfd_to_buffer)[args->cfd];
                             cout << "recv" << endl;
-                            while((n = recv(args->cfd,rec_quest,MAXBUF-1,MSG_DONTWAIT)) > 0){
+                            while((n = recv(args->cfd,rec_quest,MAXBUF-1,MSG_DONTWAIT)) > 0)
+                            {
                                 buffer.append(rec_quest,n);
                             }
                             cout << "end recv" <<endl;
-                            if(n == -1){
-                                if(errno != EAGAIN && errno != EWOULDBLOCK){
+                            if(n == -1)
+                            {
+                                if(errno != EAGAIN && errno != EWOULDBLOCK)
+                                {
                                     perror("recv");
                                     close(args->cfd);
                                     {
@@ -278,6 +312,11 @@ class serve{
                                         if(del_buffer != pthargs->cfd_to_buffer->end())
                                             pthargs->cfd_to_buffer->erase(del_buffer);
                                         if(it != pthargs->cfd_to_user->end()){
+                                            auto it_fd = pthargs->user_to_cfd->find(it->second);
+                                            if(it_fd != pthargs->user_to_cfd->end())
+                                            {
+                                                pthargs->user_to_cfd->erase(it_fd);
+                                            }  
                                             string username = it->second;
                                             json del_online = {
                                                 {"request",LOGOUT},
@@ -295,7 +334,8 @@ class serve{
                                 }              
                             }
                 
-                            if(n == 0){
+                            if(n == 0)
+                            {
                                 close(args->cfd);
                                 {
                                     lock_guard<mutex> lock(pthargs->queue_mutex);
@@ -304,8 +344,14 @@ class serve{
                                     auto del_buffer = pthargs->cfd_to_buffer->find(args->cfd);
                                     if(del_buffer != pthargs->cfd_to_buffer->end())
                                         pthargs->cfd_to_buffer->erase(del_buffer);
-                                    if(it != pthargs->cfd_to_user->end()){
+                                    if(it != pthargs->cfd_to_user->end())
+                                    {
                                         string username = it->second;
+                                        auto it_fd = pthargs->user_to_cfd->find(username);
+                                        if(it_fd != pthargs->user_to_cfd->end())
+                                        {
+                                            pthargs->user_to_cfd->erase(it_fd);
+                                        }  
                                         json del_online = {
                                             {"request",LOGOUT},
                                             {"username",username}
@@ -320,7 +366,8 @@ class serve{
                                 pthargs->cfd_to_buffer->erase(args->cfd);
                                 return nullptr;
                             }
-                            if (buffer.size() < 4){
+                            if (buffer.size() < 4)
+                            {
                                 cout << "end len: " << buffer.size() <<endl;
                                 break;
                             }
@@ -402,8 +449,11 @@ class serve{
                     break;
                 }
                 case(IN_ONLINE):{
-                    cout << "add cfd_to_user" << json_quest["username"] <<endl;
-                    (*new_args->cfd_to_user)[new_args->cfd] = json_quest["username"];
+                    string username = json_quest["username"];
+                    cout << "add cfd_to_user: " << username << endl;
+                    cout << "add user_to_cfd: " << username << endl;
+                    (*new_args->cfd_to_user)[new_args->cfd] = username;
+                    (*new_args->user_to_cfd)[username] = new_args->cfd;
                     break;
                 }
                 case(SIGNIN):{
@@ -419,7 +469,7 @@ class serve{
                         json send_json{
                             {"sort",REFLACT},
                             {"request",SIGNIN},
-                            {"reflact","注册失败，请重新注册"},
+                            {"reflact","用户名重复，请重新注册"},
                         };
                         sendjson(send_json,new_args->cfd);
                         break;
@@ -427,7 +477,7 @@ class serve{
                 }
                 case(LOGOUT):{
                     json *reflact = new json;
-                    handle_logout(json_quest,db,reflact,new_args->cfd_to_user);                         
+                    handle_logout(json_quest,db,reflact,new_args->cfd_to_user,new_args->user_to_cfd);                         
                     sendjson(*reflact,new_args->cfd);
                     delete reflact;
                     break;
@@ -542,6 +592,27 @@ class serve{
                         sendjson(*reflact,new_args->cfd);
                     delete reflact;
                     break;
+                }
+                case(CREATE_GROUP):{
+                    json *reflact = new json;
+                    if(handle_create_group(json_quest,reflact,db))
+                        sendjson(*reflact,new_args->cfd);
+                    delete reflact;
+                    break;
+                }
+                case(SEL_GROUP):{
+                    json *reflact = new json;
+                    if(handle_select_group(json_quest,reflact,db))
+                        sendjson(*reflact,new_args->cfd);
+                    delete reflact;
+                    break;
+                }
+                case(ADD_GROUP):{
+                    json *reflact = new json;
+                    if(handle_add_group(json_quest,reflact,db,*new_args->user_to_cfd))
+                        sendjson(*reflact,new_args->cfd);
+                    delete reflact;
+                    break;
                 }    
             }
 
@@ -560,6 +631,7 @@ class serve{
         struct epoll_event lev;
         struct epoll_event levlist[EPSIZE];
         unordered_map<int, string> cfd_to_user;
+        unordered_map<string ,int> user_to_cfd;
         unordered_map<int, string> cfd_to_buffer;
         unordered_map<string,string> user_to_friend;
 

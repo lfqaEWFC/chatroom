@@ -48,6 +48,7 @@ typedef struct recv_args
     string *username;
     string *fog_username;
     string *fri_username;
+    bool *id_flag;
     bool *end_flag;
     bool *end_start_flag;
     bool *fog_que_flag;
@@ -75,8 +76,8 @@ public:
         fog_que_flag(false), add_friend_req_flag(false), chat_name_flag(false), pri_chat_flag(false),
         rl_display_flag(false), chat_choice(0), start_choice(0),
         cfd(in_cfd), FTP_ctrl_cfd(FTP_ctrl_cfd), client_num(client_num),
-        FTP_data_stor_flag(false), FTP_data_retr_flag(false),get_file_flag(false){
-
+        FTP_data_stor_flag(false), FTP_data_retr_flag(false),get_file_flag(false),id_flag(false)
+        {
         epfd = epoll_create(EPSIZE);
         ev.data.fd = cfd;
         ev.events = EPOLLET | EPOLLRDHUP | EPOLLIN;
@@ -89,6 +90,7 @@ public:
         args = new recv_args;
         args->cfd = cfd;
         args->epfd = epfd;
+        args->id_flag = &id_flag;
         args->FTP_ctrl_cfd = FTP_ctrl_cfd;
         args->file_pool = file_pool;
         args->client_num = client_num;
@@ -153,8 +155,11 @@ public:
                             json send_json = {
                                 {"request", CHECK_ANS},
                                 {"username", fog_username},
-                                {"answer", in_ans}};
+                                {"answer", in_ans}
+                            };
                             sendjson(send_json, cfd);
+                            fog_username.clear();
+                            fog_que_flag = false;
                             handle_pthread_wait(end_flag, &recv_cond, &recv_lock);
                             wait_user_continue();
                         }
@@ -286,70 +291,64 @@ public:
                     case 4:
                     {
                         system("clear");
-                        json *get_fri_req = new json;
-                        handle_get_friend_req(get_fri_req, username);
-                        sendjson(*get_fri_req, cfd);
-                        delete (get_fri_req);
-                        handle_pthread_wait(end_flag, &recv_cond, &recv_lock);
-                        if (add_friend_req_flag && !end_flag)
-                        {
-                            bool add_flag = true;
-                            vector<string> commit;
-                            vector<string> refuse;
-                            while (add_flag)
-                            {
-                                int num;
-                                char chk;
-                                cout << "请输入需要处理的好友申请的选项(输入-1退出交互): " << endl;
-                                cin >> num;
-                                if (num == 0)
-                                {
-                                    add_flag = false;
-                                    break;
-                                }
-                                if ((num < 1 || num > add_friend_requests.size()) && num != -1)
-                                {
-                                    cout << "编号超出范围，请重新输入。" << endl;
-                                    continue;
-                                }
-                                if (num == -1)
-                                {
-                                    add_flag = false;
-                                    break;
-                                }
-                                cout << "请输入是否同意(y/n)" << endl;
-                                cin >> chk;
-                                if (chk == 'y')
-                                {
-                                    commit.push_back(add_friend_fri_user[num - 1]);
-                                }
-                                else if (chk == 'n')
-                                {
-                                    refuse.push_back(add_friend_fri_user[num - 1]);
-                                }
-                                else
-                                {
-                                    cout << "请勿输入无关选项..." << endl;
-                                }
-                            }
-                            if (commit.size() == 0 && refuse.size() == 0)
-                            {
-                                cout << "未处理好友关系..." << endl;
-                                sleep(1);
-                                system("clear");
+                        if (add_friend_requests.empty()) {
+                            cout << "暂无好友申请需要处理..." << endl;
+                            wait_user_continue();
+                            system("clear");
+                            continue;
+                        }
+                        
+                        bool add_flag = true;
+                        vector<string> commit;
+                        vector<string> refuse;
+                        while (add_flag) {
+                            int num;
+                            cout << "请输入需要处理的好友申请编号(输入-1退出交互): ";
+                            if (!(cin >> num)) {
+                                cin.clear();
+                                cin.ignore(numeric_limits<streamsize>::max(), '\n');
+                                cout << "输入无效，请重新输入..." << endl;
                                 continue;
                             }
-                            json send_json = {
-                                {"request", DEAL_FRI_REQ},
-                                {"commit", commit},
-                                {"refuse", refuse},
-                                {"username", username}};
-                            sendjson(send_json, cfd);
-                            handle_pthread_wait(end_flag, &recv_cond, &recv_lock);
-                            wait_user_continue();
+                            if (num == -1 || num == 0) {
+                                add_flag = false;
+                                break;
+                            }
+                            if (num < 1 || num > add_friend_requests.size()) {
+                                cout << "编号超出范围，请重新输入。" << endl;
+                                continue;
+                            }
+                            char chk;
+                            cout << "请输入是否同意(y/n): ";
+                            cin >> chk;
+                            if (chk == 'y') {
+                                commit.push_back(add_friend_fri_user[num - 1]);
+                            } else if (chk == 'n') {
+                                refuse.push_back(add_friend_fri_user[num - 1]);
+                            } else {
+                                cout << "请勿输入无关选项..." << endl;
+                            }
                         }
-                        else
+                        
+                        if (commit.empty() && refuse.empty()) {
+                            cout << "未处理好友关系..." << endl;
                             wait_user_continue();
+                            system("clear");
+                            continue;
+                        }
+                        
+                        json send_json = {
+                            {"request", DEAL_FRI_REQ},
+                            {"commit", commit},
+                            {"refuse", refuse},
+                            {"username", username}
+                        };
+                        sendjson(send_json, cfd);
+                        add_friend_req_flag = false;
+                        add_friend_fri_user.clear();
+                        add_friend_requests.clear();
+                        handle_pthread_wait(end_flag, &recv_cond, &recv_lock);
+                        wait_user_continue(); 
                         break;
                     }
                     case 5:{
@@ -364,6 +363,7 @@ public:
                             handle_retr_file(FTP_ctrl_cfd,end_flag,&recv_lock,&fri_username,
                                             &recv_cond,&FTP_data_retr_flag,&file_path);
                             rl_display_flag = false;
+                            get_file_flag = false;
                         }else wait_user_continue();
                         break;
                     }
@@ -399,6 +399,17 @@ public:
                         rl_display_flag = true;
                         handle_create_group(username,cfd);
                         rl_display_flag = false;
+                        handle_pthread_wait(end_flag, &recv_cond, &recv_lock);
+                        wait_user_continue();
+                        break;
+                    }
+                    case 10:
+                    {
+                        system("clear");
+                        rl_display_flag = true;
+                        handle_addname_group(username,cfd,end_flag,&id_flag, &recv_cond, &recv_lock);
+                        rl_display_flag = false;
+                        break;
                     }
                     default:
                     {
@@ -425,6 +436,7 @@ private:
     string file_path;
     bool FTP_data_stor_flag;
     bool FTP_data_retr_flag;
+    bool id_flag;
     bool end_flag;
     bool fog_que_flag;
     bool get_file_flag;
@@ -539,13 +551,13 @@ private:
                         if((file_recvcnt = recv(new_args->FTP_data_cfd,file_buf,MAXBUF-1,MSG_DONTWAIT)) == -1)
                         {
                             stat(file_path, &file_stat);
-                            if(file_stat.st_size == 0)
+                            if(file_size == file_stat.st_size)
+                                break;
+                            else
                             {
-                                usleep(10000);
-                                continue;             
-                            }else
-                                if(file_stat.st_size == file_size) break;
-                                        
+                                usleep(100);
+                                continue;
+                            }                 
                         }
                         write(new_args->file_fd,file_buf,file_recvcnt);
                         memset(file_buf,0,MAXBUF);
@@ -603,7 +615,7 @@ private:
                     
                     if (sent < 0) {
                         if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                            usleep(10000);
+                            usleep(100);
                             continue;
                         }else
                         {
@@ -824,6 +836,7 @@ private:
                             else if (recvjson["request"] == LOGOUT)
                             {
                                 string reflact = recvjson["reflact"];
+                                new_args->username->clear(); 
                                 cout << reflact << endl;
                             }
                             else if (recvjson["request"] == BREAK)
@@ -992,7 +1005,7 @@ private:
                                 epoll_ctl(new_args->epfd, EPOLL_CTL_ADD, datafd, &ev);
                                 send(datafd, new_args->client_num.c_str(), new_args->client_num.size() + 1, 0);
                             }
-                            else if(SHOW_FILE)
+                            else if(recvjson["request"] == SHOW_FILE)
                             {
                                 bool get_flag = recvjson["get_flag"];
                                 if(get_flag)
@@ -1012,6 +1025,37 @@ private:
                                     cout << reflact << endl;
                                     new_args->fri_username->clear();
                                 }                              
+                            }
+                            else if(recvjson["request"] == CREATE_GROUP)
+                            {
+                                string reflact = recvjson["reflact"];
+                                cout << reflact << endl;
+                            }
+                            else if(recvjson["request"] == SEL_GROUP){
+                                *new_args->id_flag = recvjson["id_flag"];
+                                cout << "=============================================" << endl;
+                                if(*new_args->id_flag)
+                                {
+                                    json sel_groups = recvjson["sel_groups"];
+                                    for(int i=0;i<sel_groups.size();i++)
+                                    {
+                                        int group_id = sel_groups[i]["group_id"];
+                                        string owner_name = sel_groups[i]["owner_name"];
+                                        cout << "群聊id: " << group_id ;
+                                        cout <<  "    群主: " << owner_name << endl;
+                                    }
+                                    cout << "=============================================" << endl;
+                                }
+                                else
+                                {
+                                    string reflact = recvjson["reflact"];
+                                    cout << reflact << endl;
+                                }
+                            }
+                            else if(recvjson["request"] == ADD_GROUP)
+                            {
+                                string reflact = recvjson["reflact"];
+                                cout << reflact << endl;
                             }
                             else
                             {
@@ -1207,10 +1251,18 @@ private:
                                 }
                                 if (end_flag)
                                     file_pair->end_flag = true;
-                                usleep(10000);
+                                usleep(1000);
                                 pthread_cond_signal(file_pair->cond);
                             }
-                            else if(END_RETR){
+                            else if(recvjson["request"] == END_RETR){
+                                string message = recvjson["message"];
+                                cout << "\r\033[K" << flush;
+                                cout << message << endl;
+                                rl_on_new_line();
+                                if (*new_args->rl_display_flag)
+                                    rl_redisplay();
+                            }
+                            else if(recvjson["request"] == ADD_GROUP){
                                 string message = recvjson["message"];
                                 cout << "\r\033[K" << flush;
                                 cout << message << endl;
