@@ -281,34 +281,35 @@ class serve{
                     
                     if(evlist[i].events & EPOLLIN) 
                     {
-                        handle_recv_args *args = new handle_recv_args;
-                        args->cfd = evlist[i].data.fd;
-                        args->user_to_friend = pthargs->user_to_friend;
-                        args->cfd_to_user = pthargs->cfd_to_user;
-                        args->user_to_cfd = pthargs->user_to_cfd;
-
                         while(true)
                         {
                             int n;
+                            int cfd = evlist[i].data.fd;
                             char rec_quest[MAXBUF];
-                            string& buffer = (*pthargs->cfd_to_buffer)[args->cfd];
-                            cout << "recv" << endl;
-                            while((n = recv(args->cfd,rec_quest,MAXBUF-1,MSG_DONTWAIT)) > 0)
+
+                            string& buffer = (*pthargs->cfd_to_buffer)[cfd];
+
+                            while((n = recv(cfd,rec_quest,MAXBUF,MSG_DONTWAIT)) > 0)
                             {
                                 buffer.append(rec_quest,n);
                             }
-                            cout << "end recv" <<endl;
+                            
                             if(n == -1)
                             {
                                 if(errno != EAGAIN && errno != EWOULDBLOCK)
                                 {
+                                    handle_recv_args *args = new handle_recv_args;
+                                    args->cfd = evlist[i].data.fd;
+                                    args->user_to_friend = pthargs->user_to_friend;
+                                    args->cfd_to_user = pthargs->cfd_to_user;
+                                    args->user_to_cfd = pthargs->user_to_cfd;
                                     perror("recv");
-                                    close(args->cfd);
+                                    close(cfd);
                                     {
                                         lock_guard<mutex> lock(pthargs->queue_mutex);
                                         pthargs->cnt--;
-                                        auto it = pthargs->cfd_to_user->find(args->cfd);
-                                        auto del_buffer = pthargs->cfd_to_buffer->find(args->cfd);
+                                        auto it = pthargs->cfd_to_user->find(cfd);
+                                        auto del_buffer = pthargs->cfd_to_buffer->find(cfd);
                                         if(del_buffer != pthargs->cfd_to_buffer->end())
                                             pthargs->cfd_to_buffer->erase(del_buffer);
                                         if(it != pthargs->cfd_to_user->end()){
@@ -328,20 +329,24 @@ class serve{
                                             pthargs->cfd_to_user->erase(it);
                                         }
                                     }
-                                    delete args;
-                                    pthargs->cfd_to_buffer->erase(args->cfd);
-                                    return nullptr;
+                                    pthargs->cfd_to_buffer->erase(cfd);
+                                    break;
                                 }              
                             }
                 
                             if(n == 0)
                             {
-                                close(args->cfd);
+                                handle_recv_args *args = new handle_recv_args;
+                                args->cfd = evlist[i].data.fd;
+                                args->user_to_friend = pthargs->user_to_friend;
+                                args->cfd_to_user = pthargs->cfd_to_user;
+                                args->user_to_cfd = pthargs->user_to_cfd;
+                                close(cfd);
                                 {
                                     lock_guard<mutex> lock(pthargs->queue_mutex);
                                     pthargs->cnt--;
-                                    auto it = pthargs->cfd_to_user->find(args->cfd);
-                                    auto del_buffer = pthargs->cfd_to_buffer->find(args->cfd);
+                                    auto it = pthargs->cfd_to_user->find(cfd);
+                                    auto del_buffer = pthargs->cfd_to_buffer->find(cfd);
                                     if(del_buffer != pthargs->cfd_to_buffer->end())
                                         pthargs->cfd_to_buffer->erase(del_buffer);
                                     if(it != pthargs->cfd_to_user->end())
@@ -362,9 +367,8 @@ class serve{
                                         pthargs->cfd_to_user->erase(it);
                                     }
                                 }
-                                delete args;
-                                pthargs->cfd_to_buffer->erase(args->cfd);
-                                return nullptr;
+                                pthargs->cfd_to_buffer->erase(cfd);
+                                break;
                             }
                             if (buffer.size() < 4)
                             {
@@ -380,8 +384,14 @@ class serve{
                             if (buffer.size() < 4 + json_len) break;
             
                             string json_str = buffer.substr(4, json_len);
+
+                            handle_recv_args *args = new handle_recv_args;
+                            args->cfd = evlist[i].data.fd;
+                            args->user_to_friend = pthargs->user_to_friend;
+                            args->cfd_to_user = pthargs->cfd_to_user;
+                            args->user_to_cfd = pthargs->user_to_cfd;
                             args->json_str = json_str;
-                            
+                    
                             buffer.erase(0, 4 + json_len);
                             pthargs->handle_recv->addtask(handle_recv_func,args);
                         }
@@ -610,6 +620,20 @@ class serve{
                 case(ADD_GROUP):{
                     json *reflact = new json;
                     if(handle_add_group(json_quest,reflact,db,*new_args->user_to_cfd))
+                        sendjson(*reflact,new_args->cfd);
+                    delete reflact;
+                    break;
+                }
+                case(DEAL_ADDGROUP):{
+                    json *reflact = new json;
+                    if(deal_add_group(json_quest,reflact,db))
+                        sendjson(*reflact,new_args->cfd);
+                    delete reflact;
+                    break;
+                }
+                case(COMMIT_ADD):{
+                    json *reflact = new json;
+                    if(handle_commit_add(json_quest,reflact,db))
                         sendjson(*reflact,new_args->cfd);
                     delete reflact;
                     break;

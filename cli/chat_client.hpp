@@ -50,6 +50,7 @@ typedef struct recv_args
     string *fri_username;
     bool *id_flag;
     bool *end_flag;
+    bool *group_add_flag;
     bool *end_start_flag;
     bool *fog_que_flag;
     bool *pri_chat_flag;
@@ -76,7 +77,8 @@ public:
         fog_que_flag(false), add_friend_req_flag(false), chat_name_flag(false), pri_chat_flag(false),
         rl_display_flag(false), chat_choice(0), start_choice(0),
         cfd(in_cfd), FTP_ctrl_cfd(FTP_ctrl_cfd), client_num(client_num),
-        FTP_data_stor_flag(false), FTP_data_retr_flag(false),get_file_flag(false),id_flag(false)
+        FTP_data_stor_flag(false), FTP_data_retr_flag(false),get_file_flag(false),id_flag(false),
+        group_add_flag(false)
         {
         epfd = epoll_create(EPSIZE);
         ev.data.fd = cfd;
@@ -99,6 +101,7 @@ public:
         args->username = &username;
         args->fog_username = &fog_username;
         args->fri_username = &fri_username;
+        args->group_add_flag = &group_add_flag;
         args->fog_que_flag = &fog_que_flag;
         args->pri_chat_flag = &pri_chat_flag;
         args->chat_name_flag = &chat_name_flag;
@@ -291,64 +294,73 @@ public:
                     case 4:
                     {
                         system("clear");
-                        if (add_friend_requests.empty()) {
-                            cout << "暂无好友申请需要处理..." << endl;
-                            wait_user_continue();
-                            system("clear");
-                            continue;
-                        }
-                        
-                        bool add_flag = true;
-                        vector<string> commit;
-                        vector<string> refuse;
-                        while (add_flag) {
-                            int num;
-                            cout << "请输入需要处理的好友申请编号(输入-1退出交互): ";
-                            if (!(cin >> num)) {
-                                cin.clear();
-                                cin.ignore(numeric_limits<streamsize>::max(), '\n');
-                                cout << "输入无效，请重新输入..." << endl;
-                                continue;
-                            }
-                            if (num == -1 || num == 0) {
-                                add_flag = false;
-                                break;
-                            }
-                            if (num < 1 || num > add_friend_requests.size()) {
-                                cout << "编号超出范围，请重新输入。" << endl;
-                                continue;
-                            }
-                            char chk;
-                            cout << "请输入是否同意(y/n): ";
-                            cin >> chk;
-                            if (chk == 'y') {
-                                commit.push_back(add_friend_fri_user[num - 1]);
-                            } else if (chk == 'n') {
-                                refuse.push_back(add_friend_fri_user[num - 1]);
-                            } else {
-                                cout << "请勿输入无关选项..." << endl;
-                            }
-                        }
-                        
-                        if (commit.empty() && refuse.empty()) {
-                            cout << "未处理好友关系..." << endl;
-                            wait_user_continue();
-                            system("clear");
-                            continue;
-                        }
-                        
-                        json send_json = {
-                            {"request", DEAL_FRI_REQ},
-                            {"commit", commit},
-                            {"refuse", refuse},
-                            {"username", username}
-                        };
-                        sendjson(send_json, cfd);
-                        add_friend_req_flag = false;
-                        add_friend_fri_user.clear();
-                        add_friend_requests.clear();
+                        json *get_fri_req = new json;
+                        handle_get_friend_req(get_fri_req, username);
+                        sendjson(*get_fri_req, cfd);
+                        delete (get_fri_req);
                         handle_pthread_wait(end_flag, &recv_cond, &recv_lock);
-                        wait_user_continue(); 
+                        if (add_friend_req_flag && !end_flag)
+                        {
+                            bool add_flag = true;
+                            vector<string> commit;
+                            vector<string> refuse;
+                            while (add_flag)
+                            {
+                                int num;
+                                char chk;
+                                cout << "请输入需要处理的好友申请的选项(输入-1退出交互): " << endl;
+                                cin >> num;
+                                if (num == 0)
+                                {
+                                    add_flag = false;
+                                    break;
+                                }
+                                if ((num < 1 || num > add_friend_requests.size()) && num != -1)
+                                {
+                                    cout << "编号超出范围，请重新输入。" << endl;
+                                    continue;
+                                }
+                                if (num == -1)
+                                {
+                                    add_flag = false;
+                                    break;
+                                }
+                                cout << "请输入是否同意(y/n)" << endl;
+                                cin >> chk;
+                                if (chk == 'y')
+                                {
+                                    commit.push_back(add_friend_fri_user[num - 1]);
+                                }
+                                else if (chk == 'n')
+                                {
+                                    refuse.push_back(add_friend_fri_user[num - 1]);
+                                }
+                                else
+                                {
+                                    cout << "请勿输入无关选项..." << endl;
+                                }
+                            }
+                            if (commit.size() == 0 && refuse.size() == 0)
+                            {
+                                cout << "未处理好友关系..." << endl;
+                                sleep(1);
+                                system("clear");
+                                continue;
+                            }
+                            json send_json = {
+                                {"request", DEAL_FRI_REQ},
+                                {"commit", commit},
+                                {"refuse", refuse},
+                                {"username", username}};
+                            sendjson(send_json, cfd);
+                            add_friend_req_flag = false;
+                            add_friend_fri_user.clear();
+                            add_friend_requests.clear();
+                            handle_pthread_wait(end_flag, &recv_cond, &recv_lock);
+                            wait_user_continue();
+                        }
+                        else
+                            wait_user_continue();
                         break;
                     }
                     case 5:{
@@ -407,7 +419,15 @@ public:
                     {
                         system("clear");
                         rl_display_flag = true;
-                        handle_addname_group(username,cfd,end_flag,&id_flag, &recv_cond, &recv_lock);
+                        handle_add_group(username,cfd,end_flag,&id_flag, &recv_cond, &recv_lock);
+                        rl_display_flag = false;
+                        break;
+                    }
+                    case 12:
+                    {
+                        system("clear");
+                        rl_display_flag = true;
+                        deal_add_group(cfd,username,end_flag,&group_add_flag, &recv_cond, &recv_lock);
                         rl_display_flag = false;
                         break;
                     }
@@ -438,6 +458,7 @@ private:
     bool FTP_data_retr_flag;
     bool id_flag;
     bool end_flag;
+    bool group_add_flag;
     bool fog_que_flag;
     bool get_file_flag;
     bool end_chat_flag;
@@ -1054,6 +1075,31 @@ private:
                             }
                             else if(recvjson["request"] == ADD_GROUP)
                             {
+                                string reflact = recvjson["reflact"];
+                                cout << reflact << endl;
+                            }
+                            else if(recvjson["request"] == DEAL_ADDGROUP)
+                            {
+                                if(recvjson["group_add_flag"])
+                                {
+                                    json elements = recvjson["reflact"];
+                                    for(int i=0;i<elements.size();i++)
+                                    {
+                                        int group_id = elements[i]["gid"];
+                                        string owner_name = elements[i]["username"];
+                                        cout << "群聊id: " << group_id ;
+                                        cout <<  "    请求用户: " << owner_name << endl;
+                                    }
+                                    *new_args->group_add_flag = true;
+                                }
+                                else
+                                {
+                                    string reflact = recvjson["reflact"];
+                                    cout << reflact << endl;
+                                }
+                                cout << "=============================================" << endl;
+                            }
+                            else if(recvjson["request"] == COMMIT_ADD){
                                 string reflact = recvjson["reflact"];
                                 cout << reflact << endl;
                             }

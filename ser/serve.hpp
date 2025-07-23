@@ -33,3 +33,5 @@ bool handle_del_retr(json json_quest,json* reflact,unique_ptr<database>&db);
 bool handle_create_group(json json_quest,json* reflact,unique_ptr<database>&db);
 bool handle_select_group(json json_quest,json* reflact,unique_ptr<database>&db);
 bool handle_add_group(json json_quest,json* reflact,unique_ptr<database>&db,unordered_map<string,int> user_to_cfd);
+bool deal_add_group(json json_quest,json* reflact,unique_ptr<database>&db);
+bool handle_commit_add(json json_quest,json* reflact,unique_ptr<database>&db);

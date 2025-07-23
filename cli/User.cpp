@@ -210,7 +210,8 @@ void handle_pri_chat(string username,string fri_user,int cfd,int FTP_ctrl_cfd,bo
                cout << "提示：\n"
                     << "- 输入 EXIT 退出文件传输模式。\n"
                     << "- 输入 LIST + 路径名 将列出目录。\n"
-                    << "- 输入 STOR + 文件路径 可传输文件。\n" << endl;
+                    << "- 输入 STOR + 文件路径 可传输文件。\n"
+                    << "- 当前尚不支持文件名有特殊字符的文件传输\n" << endl;
 
                 while (true && !(*end_flag) && *pri_flag){
                     char *file_input = readline(file_show);
@@ -517,7 +518,7 @@ void handle_create_group(string username,int cfd)
     return;
 }
 
-void handle_addname_group(string username,int cfd,bool end_flag,bool* id_flag,
+void handle_add_group(string username,int cfd,bool end_flag,bool* id_flag,
                           pthread_cond_t* cond,pthread_mutex_t* mutex)
 {
     char *input;
@@ -545,6 +546,60 @@ void handle_addname_group(string username,int cfd,bool end_flag,bool* id_flag,
         sendjson(send_json,cfd);
         handle_pthread_wait(end_flag,cond,mutex);
         *id_flag = false;
+    }
+    
+    wait_user_continue();
+    return;
+}
+
+void deal_add_group(int cfd,string username,bool endflag,bool* group_add_flag,
+                    pthread_cond_t* cond,pthread_mutex_t* mutex)
+{
+    json send_json;
+    char id_show[MSGBUF];
+    char name_show[MSGBUF];
+    char* input;
+    long gid;
+
+    send_json = {
+        {"request",DEAL_ADDGROUP},
+        {"username",username},
+    };
+    sendjson(send_json,cfd);
+    handle_pthread_wait(endflag,cond,mutex);
+
+    if(*group_add_flag)
+    {
+        json send_json;
+        json elements = json::array();
+        strcpy(id_show,"请输入群聊id(输入-1退出交互): ");
+        strcpy(name_show,"请输入用户名: ");
+
+        while(true)
+        {
+            input = readline(id_show);
+            gid = atoi(input);
+            if(gid == -1) break;
+            input = readline(name_show);
+            json msg = {
+                {"gid",gid},
+                {"username",input}
+            };
+            elements.push_back(msg);
+        }
+
+        if(elements.size()!= 0)
+        {
+            send_json = {
+                {"request",COMMIT_ADD},
+                {"elements",elements}
+            };
+            sendjson(send_json,cfd);
+            handle_pthread_wait(endflag,cond,mutex);
+        }
+        else cout << "未处理请求..." << endl;
+        
+        *group_add_flag = false;
     }
     
     wait_user_continue();

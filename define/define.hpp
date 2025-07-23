@@ -36,6 +36,8 @@
 #define CREATE_GROUP 34
 #define SEL_GROUP 35
 #define ADD_GROUP 36
+#define DEAL_ADDGROUP 37
+#define COMMIT_ADD 38
 #define GROUP_LEN 32
 #define REFLACT 1000
 #define FTP_PORTNUM "2100"

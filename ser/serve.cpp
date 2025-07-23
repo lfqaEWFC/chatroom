@@ -252,12 +252,15 @@ bool handle_break(json json_quest,unique_ptr<database> &db,json *reflact){
     string break_password = json_quest["password"];
 
     string sql = "DELETE FROM user WHERE username = '" + break_username + "' AND password = '" + break_password + "'";
-    bool res = db->execute_sql(sql);
-
-    if(!res){
+    bool res1 = db->execute_sql(sql);
+    sql = "DELETE FROM friendship WHERE username = '"+break_username+"' OR friend_username = '"+break_username+"'";
+    bool res2 = db->execute_sql(sql);
+    sql = "DELETE FROM private_message WHERE sender = '"+break_username+"' OR receiver = '"+break_username+"'";
+    bool res3 = db->execute_sql(sql);
+    if(!res1 || !res2 || !res3){
         *reflact = {
             {"sort",ERROR},
-            {"reflact","服务端查询用户表异常..."}
+            {"reflact","服务端删除异常..."}
         };
         return false;
     }
@@ -1779,5 +1782,133 @@ bool handle_add_group(json json_quest,json* reflact,unique_ptr<database>&db,
     };
 
     db->free_result(res);
+    return true;
+}
+
+bool deal_add_group(json json_quest,json* reflact,unique_ptr<database>&db)
+{
+    string username = json_quest["username"];
+    MYSQL_RES *res;
+    MYSQL_RES *res1;
+    MYSQL_ROW row;
+    uint64_t rows;
+
+    res = db->query_sql("SELECT group_id FROM group_members WHERE "
+                        "(role = 'owner' AND username = '"+username+"') OR "
+                        "(role = 'admin' AND username = '"+username+"')");
+    if(res == nullptr)
+    {
+        *reflact = {
+            {"sort",ERROR},
+            {"reflact","MYSQL SELECT ERROR..."}
+        };
+        db->free_result(res);
+        return true;
+    }
+    rows = mysql_num_rows(res);
+    if(rows <= 0)
+    {
+        *reflact = {
+            {"sort",REFLACT},
+            {"request",DEAL_ADDGROUP},
+            {"group_add_flag",false},
+            {"reflact","暂无需要处理的加群申请..."}
+        };
+        db->free_result(res);
+        return true;
+    }
+    json elements = json::array();
+    while((row = mysql_fetch_row(res)) != nullptr)
+    {
+        long gid = atoi(row[0]);
+        res1 = db->query_sql("SELECT username FROM group_members WHERE "
+                            "group_id = "+to_string(gid)+" AND status = false");
+        if(res == nullptr)
+        {
+            *reflact = {
+                {"sort",ERROR},
+                {"reflact","MYSQL SELECT ERROR..."}
+            };
+            db->free_result(res);
+            db->free_result(res1);
+            return true;
+        }
+        while((row = mysql_fetch_row(res1)) != nullptr)
+        {
+            json msg = {
+                {"gid",gid},
+                {"username",row[0]}
+            };
+            elements.push_back(msg);
+        }
+        db->free_result(res1);
+    }
+    if(elements.size() == 0)
+    {
+        *reflact = {
+            {"sort",REFLACT},
+            {"request",DEAL_ADDGROUP},
+            {"group_add_flag",false},
+            {"reflact","暂无需要处理的加群申请..."}
+        };
+        db->free_result(res);
+        return true;
+    }
+
+    *reflact = {
+        {"sort",REFLACT},
+        {"request",DEAL_ADDGROUP},
+        {"group_add_flag",true},
+        {"reflact",elements}
+    };
+
+    db->free_result(res);
+    return true;
+}
+
+bool handle_commit_add(json json_quest,json* reflact,unique_ptr<database>&db)
+{
+    MYSQL* sql = db->get_mysql_conn();
+    json elements = json_quest["elements"];
+    int success_cnt = 0;
+    int fail_cnt = 0;
+    bool sql_chk = true;
+
+    for(long i=0;i<elements.size();i++)
+    {
+        json msg = elements[i];
+        long gid = msg["gid"];
+        string username = msg["username"];
+        sql_chk = db->execute_sql("UPDATE group_members SET status = 1 WHERE "
+                                  "username = '"+username+"' AND group_id = "+to_string(gid)+" AND status = 0");
+        if(sql_chk == false)
+        {
+            *reflact = {
+                {"sort",ERROR},
+                {"reflact","MYSQL UPDATE ERROR..."}
+            };
+            return true;
+        }
+        uint64_t affacted_rows = mysql_affected_rows(sql);
+        if(affacted_rows > 0) success_cnt++;
+        else fail_cnt++;
+    }
+
+    if(success_cnt == 0)
+    {
+        *reflact = {
+            {"sort",REFLACT},
+            {"request",COMMIT_ADD},
+            {"reflact","操作失败，请输入正确信息"}
+        };
+        return true;
+    }
+
+    *reflact = {
+        {"sort",REFLACT},
+        {"request",COMMIT_ADD},
+        {"reflact","有 "+to_string(success_cnt)+" 次操作处理成功"}
+    };
+
     return true;
 }
