@@ -17,13 +17,14 @@ bool handle_break(json *json_break);
 void handle_success_login(int cfd,string username);
 void handle_add_friend(json *json_friend,string username);
 void handle_offline_login(int cfd,string username);
-void handle_get_friend_req(json *get_friend_req,string usernamevoid );
+void handle_get_friend_req(json *get_friend_req,string username );
 void handle_chat_name(json *get_friend_req,string usernamevoid);
 void handle_history_pri(json *offline_pri,string username);
 void handle_pri_chat(string username,string fri_user,int cfd,int FTP_ctrl_cfd,bool* end_flag,
                      bool* FTP_stor_flag,bool* pri_flag,string client_num,
-                     pthread_cond_t *cond,pthread_mutex_t *mutex,string* file_path,string *fri_username);
-void handle_black(string username,int cfd,bool *rl_display_flag);
+                     pthread_cond_t *cond,pthread_mutex_t *mutex,string* file_path,
+                     string *fri_username,string *pri_show);
+void handle_black(string username,int cfd);
 void handle_check_friend(string username,int cfd);
 void handle_delete_friend(string username,int cfd);
 void handle_pthread_wait(bool endflag,pthread_cond_t *cond,pthread_mutex_t *mutex);

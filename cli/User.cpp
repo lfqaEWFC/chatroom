@@ -1,19 +1,25 @@
 #include "User.hpp"
 
-int handle_signin(json* signin){
-
+int handle_signin(json* signin)
+{
     bool checkflag = true;
-    char *username = new char[64];
-    char *password = new char[64];
-    char *checkpw = new char[64];
+    char *input;
+    char username[64];
+    char password[64];
+    char checkpw[64];
     char question[1024];
     char answer[1024];
+    char show[LARGESIZE];
     
-    cout << "请输入注册账户名称" << endl;
-    cin >> username;
-    while(true){
-        cout << "请输入注册账户密码" << endl;
-        cin >> password;
+    strcpy(show,"账户名称：");
+    input = readline(show);
+    strcpy(username,input);
+    while(true)
+    {
+        strcpy(show,"账户密码：");
+        free(input);
+        input = readline(show);
+        strcpy(password,input);
         if(strlen(password) < 8){
             cout << "密码长度过短，请重新输入" << endl;
             memset(password,0,64);
@@ -22,9 +28,12 @@ int handle_signin(json* signin){
         system("clear");
         break;
     }
-    while(checkflag){
-        cout << "请确认密码" << endl;
-        cin >> checkpw;
+    while(checkflag)
+    {
+        strcpy(show,"请确认密码：");
+        free(input);
+        input = readline(show);
+        strcpy(checkpw,input);
         if(strcmp(checkpw,password) == 0){
             cout << "密码设置成功" << endl;
             checkflag = false;
@@ -36,10 +45,14 @@ int handle_signin(json* signin){
         }
     }
 
-    cout << "请输入密保问题" << endl;
-    cin >> question;
-    cout << "请输入答案" << endl;
-    cin  >> answer;
+    strcpy(show,"密保问题：");
+    free(input);
+    input = readline(show);
+    strcpy(question,input);
+    strcpy(show,"答案：");
+    free(input);
+    input = readline(show);
+    strcpy(answer,input);
     
     *signin = {
         {"request",SIGNIN},
@@ -49,30 +62,33 @@ int handle_signin(json* signin){
         {"ans",answer},
     };
 
-    delete[] username;
-    delete[] password;
-    delete[] checkpw;
-
+    free(input);
     return 0;
 
 }
 
-bool handle_login(json *login){
+bool handle_login(json *login)
+{
+    char *input;
+    char show[LARGESIZE];
+    char in_user[64];
+    char in_password[64];
 
-    char *in_user = new char[64];
-    string in_password;
+    strcpy(show,"用户名称： ");
+    input = readline(show);
+    strcpy(in_user,input);
+    cout << "如果忘记密码,请输入Y以获取密保问题" << endl;
+    strcpy(show,"用户密码： ");
+    free(input);
+    input = readline(show);
+    strcpy(in_password,input);
 
-    cout << "请输入用户名称 : " << endl;
-    cin >> in_user;
-    cout << "请输入用户密码 : " << endl;
-    cout << "如果忘记密码,请输入Y以获取密保问题..." << endl;
-    cin >> in_password;
-
-    if(in_password == "Y"){
+    if(strcmp(in_password,"Y") == 0){
         *login = {
             {"request",FORGET_PASSWORD},
             {"username",in_user}
         };
+        free(input);
         return true;
     }
 
@@ -82,8 +98,7 @@ bool handle_login(json *login){
         {"password",in_password}
     };
 
-    cout << "end login" << endl;
-
+    free(input);
     return true;
 }
 
@@ -101,13 +116,18 @@ void handle_success_login(int cfd,string username){
 
 bool handle_break(json *json_break){
 
-    string break_username;
-    string break_password;
+    char* input;
+    char show[LARGESIZE];
+    char break_username[LARGESIZE];
+    char break_password[LARGESIZE];
 
-    cout << "请输入要注销的账号名称: " << endl;
-    cin >> break_username;
-    cout << "请输入帐号密码: " << endl;
-    cin >> break_password;
+    strcpy(show,"账号名称: ");
+    input = readline(show);
+    strcpy(break_username,input);
+    strcpy(show,"密码: ");
+    free(input);
+    input = readline(show);
+    strcpy(break_password,input);
 
     *json_break = {
         {"request",BREAK},
@@ -115,15 +135,19 @@ bool handle_break(json *json_break){
         {"password",break_password}
     };
 
+    free(input);
     return true;
 }
 
 void handle_add_friend(json *json_friend,string username){
 
-    string friend_user;
+    char* input;
+    char show[LARGESIZE];
+    char friend_user[LARGESIZE];
 
-    cout << "请输入需要添加的好友名称: " << endl;
-    cin >> friend_user;
+    strcpy(show,"添加好友名称： ");
+    input = readline(show);
+    strcpy(friend_user,input);
 
     *json_friend = {
         {"request",ADD_FRIEND},
@@ -131,6 +155,7 @@ void handle_add_friend(json *json_friend,string username){
         {"fri_username",friend_user},
     };
 
+    free(input);
     return;
 }
 
@@ -158,11 +183,13 @@ void handle_get_friend_req(json *get_friend_req,string username){
 
 void handle_chat_name(json *chat_name,string username){
     
-    string send_username = username;
-    string fri_user;
+    char show[LARGESIZE];
+    char* input;
+    char fri_user[LARGESIZE];
     
-    cout << "请输入好友名称" << endl;
-    cin >> fri_user;
+    strcpy(show,"对端好友名称： ");
+    input = readline(show);
+    strcpy(fri_user,input);
 
     *chat_name = {
         {"request",CHAT_NAME},
@@ -170,6 +197,7 @@ void handle_chat_name(json *chat_name,string username){
         {"fri_user",fri_user}
     };
 
+    free(input);
     return;
 }
 
@@ -185,7 +213,8 @@ void handle_history_pri(json *offline_pri,string username){
 
 void handle_pri_chat(string username,string fri_user,int cfd,int FTP_ctrl_cfd,bool* end_flag,
                      bool* FTP_stor_flag,bool* pri_flag,string client_num,
-                     pthread_cond_t *cond,pthread_mutex_t *mutex,string* file_path,string* fri_username)
+                     pthread_cond_t *cond,pthread_mutex_t *mutex,string* file_path,
+                     string* fri_username,string* pri_show)
 {   
     cout << "进入私聊模式，对方：" << fri_user << endl;
     cout << "提示：\n"
@@ -193,124 +222,129 @@ void handle_pri_chat(string username,string fri_user,int cfd,int FTP_ctrl_cfd,bo
         << "- 输入 /exit 可退出私聊。\n" 
         << "- 输入 /file 可传输文件。\n" << endl;
         
-        while (true && !(*end_flag) && *pri_flag){
-           
-            char show[MAX_REASONABLE_SIZE];
-      
-            sprintf(show,"[%s->%s]: ",username.c_str(),fri_user.c_str());        
-            char *input = readline(show);
-            if (!input) break;                   
-            string message = string(input);
+    *pri_show = "["+username+"->"+fri_user+"]: ";
+
+    while (true && !(*end_flag) && *pri_flag){
         
-            if (message == "/file") {
-               char file_show[MAX_REASONABLE_SIZE];
-               strcpy(file_show,"请输入命令：");
+        string input;
+        char show[MAX_REASONABLE_SIZE];
+    
+        sprintf(show,"[%s->%s]: ",username.c_str(),fri_user.c_str());
+        cout << show;        
+        getline(cin,input);                 
+        string message = input;
+    
+        if (message == "/file") {
+            char file_show[MAX_REASONABLE_SIZE];
+            strcpy(file_show,"请输入命令：");
+            *pri_show = "请输入命令：";
 
-               cout << "进入文件传输模式：" << endl;
-               cout << "提示：\n"
-                    << "- 输入 EXIT 退出文件传输模式。\n"
-                    << "- 输入 LIST + 路径名 将列出目录。\n"
-                    << "- 输入 STOR + 文件路径 可传输文件。\n"
-                    << "- 当前尚不支持文件名有特殊字符的文件传输\n" << endl;
+            cout << "进入文件传输模式：" << endl;
+            cout << "提示：\n"
+                << "- 输入 EXIT 退出文件传输模式。\n"
+                << "- 输入 LIST + 路径名 将列出目录。\n"
+                << "- 输入 STOR + 文件路径 可传输文件。\n"
+                << "- 当前尚不支持文件名有特殊字符的文件传输\n" << endl;
 
-                while (true && !(*end_flag) && *pri_flag){
-                    char *file_input = readline(file_show);
+            while (true && !(*end_flag) && *pri_flag){
+                char *file_input = readline(file_show);
 
-                    if(strstr(file_input,"LIST")){
-                        char *cmd = NULL;
-                        char *path = NULL;
-                        char *saveptr = NULL;
-                        
-                        cmd = strtok_r(file_input, " \n", &saveptr);
-                        path = strtok_r(NULL, " \n", &saveptr);
+                if(strstr(file_input,"LIST")){
+                    char *cmd = NULL;
+                    char *path = NULL;
+                    char *saveptr = NULL;
+                    
+                    cmd = strtok_r(file_input, " \n", &saveptr);
+                    path = strtok_r(NULL, " \n", &saveptr);
 
-                        json send_json;
-                        if(path != NULL){
-                            send_json = {
-                                {"cmd","LIST"},
-                                {"path",path},
-                                {"run_flag",true}
-                            };
-                        }
-                        else{
-                            send_json = {
-                                {"cmd","LIST"},
-                                {"run_flag",false}
-                            };
-                        }
-                        sendjson(send_json,FTP_ctrl_cfd);
-                        handle_pthread_wait(*end_flag,cond,mutex);
+                    json send_json;
+                    if(path != NULL){
+                        send_json = {
+                            {"cmd","LIST"},
+                            {"path",path},
+                            {"run_flag",true}
+                        };
                     }
-                    else if(strstr(file_input,"STOR")){                    
-                        string input_str(file_input);
-                        size_t pos = input_str.find(' ');
-                        string filepath;
-                        if (pos != string::npos) {
-                            filepath = input_str.substr(pos + 1);
-                            if (filepath.empty()) {
-                                cout << "命令格式错误，应为: STOR <文件路径>" << endl;
-                                continue;
-                            }
-                            int fd = open(filepath.c_str(), O_RDONLY);
-                            if (fd == -1) {
-                                cout << "文件不存在或无法读取: " << filepath << endl;
-                                continue;
-                            }
-                            close(fd);                
-                        }
-                        else {
+                    else{
+                        send_json = {
+                            {"cmd","LIST"},
+                            {"run_flag",false}
+                        };
+                    }
+                    sendjson(send_json,FTP_ctrl_cfd);
+                    handle_pthread_wait(*end_flag,cond,mutex);
+                }
+                else if(strstr(file_input,"STOR")){                    
+                    string input_str(file_input);
+                    size_t pos = input_str.find(' ');
+                    string filepath;
+                    if (pos != string::npos) {
+                        filepath = input_str.substr(pos + 1);
+                        if (filepath.empty()) {
                             cout << "命令格式错误，应为: STOR <文件路径>" << endl;
                             continue;
                         }
-                        *FTP_stor_flag = true;
-
-                        json send_json = {
-                            {"cmd","PASV"},
-                            {"filepath",filepath}
-                        };
-                        sendjson(send_json,FTP_ctrl_cfd);
-                        *file_path = filepath;
-                        handle_pthread_wait(*end_flag,cond,mutex);
-                    } 
-                    else if(strcmp(file_input,"EXIT") == 0){
-                        cout << "退出文件传输模式..." << endl;
-                        break;
+                        int fd = open(filepath.c_str(), O_RDONLY);
+                        if (fd == -1) {
+                            cout << "文件不存在或无法读取: " << filepath << endl;
+                            continue;
+                        }
+                        close(fd);                
                     }
-                    else{
-                        cout << "命令错误，请重新输入命令..." << endl;
+                    else {
+                        cout << "命令格式错误，应为: STOR <文件路径>" << endl;
                         continue;
                     }
-                    free(file_input);
-                }         
-            }
-            else if (message == "/exit") {
-                json end = {
-                    {"request",DEL_PEER},
-                    {"from",username},
-                    {"to",fri_user}
-                };
-                sendjson(end, cfd);
-                fri_username->clear();
-                break;
-            }
-            else {
-                if(!(*end_flag) && *pri_flag){
-                    json msg = {
-                        {"request", PRIVATE_CHAT},
-                        {"from", username},
-                        {"to", fri_user},
-                        {"file_flag", false},
-                        {"message", message}
+                    *FTP_stor_flag = true;
+
+                    json send_json = {
+                        {"cmd","PASV"},
+                        {"filepath",filepath}
                     };
-                    sendjson(msg, cfd);
+                    sendjson(send_json,FTP_ctrl_cfd);
+                    *file_path = filepath;
+                    handle_pthread_wait(*end_flag,cond,mutex);
+                } 
+                else if(strcmp(file_input,"EXIT") == 0){
+                    cout << "退出文件传输模式..." << endl;
+                    *pri_show = "["+username+"->"+fri_user+"]: ";
+                    break;
                 }
-            }
-            free(input);
+                else{
+                    cout << "命令错误，请重新输入命令..." << endl;
+                    continue;
+                }
+                free(file_input);
+            }         
         }
+        else if (message == "/exit") {
+            json end = {
+                {"request",DEL_PEER},
+                {"from",username},
+                {"to",fri_user}
+            };
+            sendjson(end, cfd);
+            pri_show->clear();
+            fri_username->clear();
+            break;
+        }
+        else {
+            if(!(*end_flag) && *pri_flag){
+                json msg = {
+                    {"request", PRIVATE_CHAT},
+                    {"from", username},
+                    {"to", fri_user},
+                    {"file_flag", false},
+                    {"message", message}
+                };
+                sendjson(msg, cfd);
+            }
+        }
+    }
     return;
 }
 
-void handle_black(string username,int cfd,bool *rl_display_flag) {
+void handle_black(string username,int cfd) {
 
     char* input;
     json blacklist;
@@ -322,7 +356,6 @@ void handle_black(string username,int cfd,bool *rl_display_flag) {
     cout << "=============" << endl;
 
     while(in_flag) {
-        *rl_display_flag = true; 
         input = readline("请输入选项: ");
         if (input == nullptr) {
             cout << "输入不能为空，请重新输入..." << endl;
@@ -334,12 +367,13 @@ void handle_black(string username,int cfd,bool *rl_display_flag) {
         }
         char choice = input[0];
         free(input);
-        *rl_display_flag = false; 
         switch(choice) {
             case 'a': {
-                cout << "请输入要加入黑名单的用户名:" << endl;
-                string target;
-                cin >> target;
+                char show[LARGESIZE];
+                char target[LARGESIZE];
+                strcpy(show,"请输入要加入黑名单的用户名： ");
+                input = readline(show);
+                strcpy(target,input);
                 blacklist["request"] = ADD_BLACKLIST;
                 blacklist["username"] = username;
                 blacklist["target"] = target;
@@ -347,9 +381,11 @@ void handle_black(string username,int cfd,bool *rl_display_flag) {
                 break;
             }
             case 'b': {
-                cout << "请输入要移除黑名单的用户名:" << endl;
-                string target;
-                cin >> target;
+                char show[LARGESIZE];
+                char target[LARGESIZE];
+                strcpy(show,"请输入要移除黑名单的用户名： ");
+                input = readline(show);
+                strcpy(target,input);
                 blacklist["request"] = REMOVE_BLACKLIST;
                 blacklist["username"] = username;
                 blacklist["target"] = target;
@@ -365,6 +401,7 @@ void handle_black(string username,int cfd,bool *rl_display_flag) {
 
     sendjson(blacklist,cfd);
 
+    free(input);
     return;
 }
 
@@ -393,6 +430,7 @@ void handle_delete_friend(string username,int cfd){
 
     sendjson(delete_json,cfd);
 
+    free(del_user);
     return;
 }
 
@@ -454,6 +492,7 @@ void handle_show_file(string username, int cfd, string* fri_username)
 
     *fri_username = fri_user;
 
+    free(fri_user);
     return;
 }
 
@@ -472,6 +511,7 @@ void handle_retr_file(int FTP_ctrl_cfd,bool endflag,pthread_mutex_t* mutex,strin
             cout << "退出文件接收模式..." << endl;
             wait_user_continue();
             fri_username->clear();
+            free(filename);
             return;
         }
         else
@@ -485,6 +525,7 @@ void handle_retr_file(int FTP_ctrl_cfd,bool endflag,pthread_mutex_t* mutex,strin
         }
         *FTP_retr_flag = true;
         handle_pthread_wait(endflag,cond,mutex);
+        free(filename);
     }
 
     return;
@@ -503,6 +544,7 @@ void handle_create_group(string username,int cfd)
         if(strlen(input) > GROUP_LEN)
         {
             cout << "群聊名称过长，请重新输入...." << endl;
+            free(input);
             continue;
         }
         break;
@@ -515,6 +557,7 @@ void handle_create_group(string username,int cfd)
     };
     sendjson(send_json,cfd);
 
+    free(input);
     return;
 }
 
@@ -549,6 +592,7 @@ void handle_add_group(string username,int cfd,bool end_flag,bool* id_flag,
     }
     
     wait_user_continue();
+    free(input);
     return;
 }
 
@@ -579,13 +623,19 @@ void deal_add_group(int cfd,string username,bool endflag,bool* group_add_flag,
         {
             input = readline(id_show);
             gid = atoi(input);
-            if(gid == -1) break;
+            if(gid == -1)
+            {
+                free(input);
+                break;
+            }
+            free(input);
             input = readline(name_show);
             json msg = {
                 {"gid",gid},
                 {"username",input}
             };
             elements.push_back(msg);
+            free(input);
         }
 
         if(elements.size()!= 0)
