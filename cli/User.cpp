@@ -605,3 +605,17 @@ void deal_add_group(int cfd,string username,bool endflag,bool* group_add_flag,
     wait_user_continue();
     return;
 }
+
+void handle_show_group(int cfd,string username)
+{
+    json send_json;
+
+    send_json = {
+        {"request",SHOW_GROUP},
+        {"username",username}
+    };
+
+    sendjson(send_json,cfd);
+
+    return;
+}

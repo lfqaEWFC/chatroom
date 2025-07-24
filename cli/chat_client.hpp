@@ -431,6 +431,16 @@ public:
                         rl_display_flag = false;
                         break;
                     }
+                    case 13:
+                    {
+                        system("clear");
+                        rl_display_flag = true;
+                        handle_show_group(cfd,username);
+                        rl_display_flag = false;
+                        handle_pthread_wait(end_flag, &recv_cond, &recv_lock);
+                        wait_user_continue();
+                        break;
+                    }
                     default:
                     {
                         cout << "请输入正确的选项..." << endl;
@@ -1102,6 +1112,32 @@ private:
                             else if(recvjson["request"] == COMMIT_ADD){
                                 string reflact = recvjson["reflact"];
                                 cout << reflact << endl;
+                            }
+                            else if(recvjson["request"] == SHOW_GROUP){
+                                if(recvjson["show_flag"])
+                                {
+                                    cout << "=============================================" << endl;
+                                    cout << "以下是群聊列表: " << endl;
+                                    json elements = recvjson["elements"];
+                                    for(int i=0;i<elements.size();i++)
+                                    {
+                                        json msg = elements[i];
+                                        long gid = msg["gid"];
+                                        string role = msg["role"];
+                                        string group_name = msg["group_name"];
+                                        string owner_name = msg["owner_name"];
+                                        cout << "群聊id: " << gid ;
+                                        cout << "   群聊名称: " << group_name;
+                                        cout << "   群主: " << owner_name;
+                                        cout << "   角色: " << role << endl;;
+                                    }
+                                }
+                                else
+                                {
+                                    string reflact = recvjson["reflact"];
+                                    cout << reflact << endl;
+                                }
+                                cout << "=============================================" << endl;
                             }
                             else
                             {

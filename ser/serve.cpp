@@ -1912,3 +1912,91 @@ bool handle_commit_add(json json_quest,json* reflact,unique_ptr<database>&db)
 
     return true;
 }
+
+bool handle_show_group(json json_quest,json* reflact,unique_ptr<database>&db)
+{
+    string username = json_quest["username"];
+    json elements = json::array();
+    MYSQL_RES *res;
+    MYSQL_RES *res1;
+    MYSQL_ROW row;
+    MYSQL_ROW row1;
+    uint64_t rows;
+    
+    res = db->query_sql("SELECT group_id,role FROM group_members "
+                        "WHERE username = '"+username+"' and status = 1");
+    if(res == nullptr)
+    {
+        *reflact = {
+            {"sort",ERROR},
+            {"reflact","MYSQL SELECT ERROR..."}
+        };
+        db->free_result(res);
+        return true;
+    }
+    rows = mysql_num_rows(res);
+    if(rows <= 0)
+    {
+        *reflact = {
+            {"sort",REFLACT},
+            {"request",SHOW_GROUP},
+            {"show_flag",false},
+            {"reflact","当前尚未加入群聊，请先加入群聊之后再查询..."}
+        };
+        db->free_result(res);
+        return true;
+    }
+    while((row = mysql_fetch_row(res)) != nullptr)
+    {
+        json msg;
+        long gid = atoi(row[0]);
+        string role = row[1];
+
+        res1 = db->query_sql("SELECT name,owner_name FROM `groups` "
+                             "WHERE group_id = "+to_string(gid)+"");
+        if(res1 == nullptr)
+        {
+            *reflact = {
+                {"sort",ERROR},
+                {"reflact","MYSQL SELECT ERROR..."}
+            };
+            db->free_result(res);
+            return true;
+        }
+        row1 = mysql_fetch_row(res1);
+        if(row1 == nullptr)
+        {
+            *reflact = {
+                {"sort",REFLACT},
+                {"request",SHOW_GROUP},
+                {"show_flag",false},
+                {"reflact","mysql select error (row == nullptr)..."}
+            };
+            db->free_result(res1);
+            db->free_result(res);
+            return true;
+        }
+        string group_name = row1[0];
+        string owner_name = row1[1];
+
+        msg = {
+            {"gid",gid},
+            {"role",role},
+            {"group_name",group_name},
+            {"owner_name",owner_name}
+        };
+        elements.push_back(msg);
+        
+        db->free_result(res1);
+    }
+
+    *reflact = {
+        {"sort",REFLACT},
+        {"request",SHOW_GROUP},
+        {"show_flag",true},
+        {"elements",elements}
+    };
+
+    db->free_result(res);
+    return true;
+}

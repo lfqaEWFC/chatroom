@@ -637,7 +637,14 @@ class serve{
                         sendjson(*reflact,new_args->cfd);
                     delete reflact;
                     break;
-                }    
+                } 
+                case(SHOW_GROUP):{
+                    json *reflact = new json;
+                    if(handle_show_group(json_quest,reflact,db))
+                        sendjson(*reflact,new_args->cfd);
+                    delete reflact;
+                    break;
+                }   
             }
 
             delete new_args;        

@@ -36,3 +36,4 @@ void handle_add_group(string username,int cfd,bool end_flag,bool* id_flag,
                       pthread_cond_t* cond,pthread_mutex_t* mutex);
 void deal_add_group(int cfd,string username,bool endflag,bool* group_add_flag,
                     pthread_cond_t* cond,pthread_mutex_t* mutex);
+void handle_show_group(int cfd,string username);
