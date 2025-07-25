@@ -1,0 +1,1 @@
+/usr/bin/c++ CMakeFiles/FTP_serve.dir/ser/FTP_serve.cpp.o CMakeFiles/FTP_serve.dir/include/inetsockets_tcp.cpp.o CMakeFiles/FTP_serve.dir/include/Threadpool.cpp.o -o FTP_serve  -lhiredis -lncurses -lreadline

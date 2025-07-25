@@ -1,0 +1,1 @@
+/usr/bin/c++ CMakeFiles/client.dir/cli/chat_client.cpp.o CMakeFiles/client.dir/cli/menu.cpp.o CMakeFiles/client.dir/include/inetsockets_tcp.cpp.o CMakeFiles/client.dir/include/Threadpool.cpp.o CMakeFiles/client.dir/cli/User.cpp.o -o client  -lhiredis -lncurses -lreadline

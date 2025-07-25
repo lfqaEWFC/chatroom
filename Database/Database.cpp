@@ -118,3 +118,19 @@ bool database::lpushJson(const string& key, const json& json_data){
     freeReplyObject(reply);
     return true;
 }
+
+string database::escape_mysql_string_full(const string& input)
+{
+    string output;
+    output.resize(input.size() * 2 + 1);
+    
+    unsigned long len = mysql_real_escape_string(mysql_conn,
+                                                 &output[0],
+                                                 input.c_str(),
+                                                 input.size());
+
+    output.resize(len);
+
+    return output;
+}
+

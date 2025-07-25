@@ -1150,8 +1150,9 @@ private:
                         {
                             if (recvjson["request"] == ASK_ADD_FRIEND)
                             {
+                                string message  = recvjson["message"];
                                 cout << "\r\033[K" << flush;
-                                cout << recvjson["message"] << endl;
+                                cout << message << endl;
                                 if(!(*new_args->pri_chat_flag))
                                 {
                                     rl_on_new_line();
@@ -1162,9 +1163,10 @@ private:
                             }
                             else if (recvjson["request"] == ADD_BLACKLIST)
                             {
+                                string reflact;
                                 *new_args->pri_chat_flag = false;
                                 cout << "\r\033[K" << flush;
-                                cout << recvjson["reflact"] << endl;
+                                cout << reflact << endl;
                                 if(!(*new_args->pri_chat_flag))
                                 {
                                     rl_on_new_line();

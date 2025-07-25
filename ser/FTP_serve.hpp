@@ -24,8 +24,8 @@ typedef struct data_args
     int fd = 0;
     int data_num;
     char clientnum[10];
-    char retr_filename[64];
-    char stor_filename[64];
+    string retr_filename;
+    string  stor_filename;
     off_t stor_filesize;
     bool stor_flag = false;
     bool retr_flag = false;
@@ -604,9 +604,9 @@ class FTP
                 getcwd(cur_path,LARGESIZE);
                 sprintf(load_filename,"%s_to_%s-%s",sender.c_str(),receiver.c_str(),filename.c_str());
                 sprintf(open_path,"%s/%s/%s",cur_path,"file_tmp",load_filename);
-                strcpy(my_data_pair->retr_filename,open_path);
+                my_data_pair->retr_filename = open_path;
 
-                if(open(my_data_pair->retr_filename,O_RDONLY,0644) == -1){
+                if(open(my_data_pair->retr_filename.c_str(),O_RDONLY,0644) == -1){
                     send_json = {
                         {"sort",MESSAGE},
                         {"request",RETR_START},
@@ -619,8 +619,9 @@ class FTP
                 }
                 else{
                     struct stat size_stat;
-                    stat(my_data_pair->retr_filename,&size_stat);
-                    sprintf(sendbuf,"%s %s (%lld %s)","150 Opening BINARY mode data connection for",my_data_pair->retr_filename,(long long)size_stat.st_size,"bytes");
+                    stat(my_data_pair->retr_filename.c_str(),&size_stat);
+                    sprintf(sendbuf,"%s %s (%lld %s)","150 Opening BINARY mode data connection "
+                            "for",my_data_pair->retr_filename.c_str(),(long long)size_stat.st_size,"bytes");
                     send_json = {
                         {"sort",MESSAGE},
                         {"request",RETR_START},
@@ -658,7 +659,7 @@ class FTP
                 getcwd(cur_path,LARGESIZE);                
                 sprintf(creat_name,"%s_to_%s-%s",sender.c_str(),receiver.c_str(),filename.c_str());
                 sprintf(open_path,"%s/%s/%s",cur_path,"file_tmp",creat_name);
-                strcpy(my_data_pair->stor_filename,open_path);
+                my_data_pair->stor_filename = open_path;
                         
                 my_data_pair->stor_filefd = open(open_path,O_CREAT|O_RDWR|O_TRUNC,0644);
                 my_data_pair->stor_filesize = file_size;
@@ -712,9 +713,9 @@ class FTP
             off_t off_set = 0;
             struct stat file_stat;
 
-            stat(new_arg->retr_filename,&file_stat);
+            stat(new_arg->retr_filename.c_str(),&file_stat);
             file_size = file_stat.st_size;
-            file_fd = open(new_arg->retr_filename,O_RDONLY,0754);
+            file_fd = open(new_arg->retr_filename.c_str(),O_RDONLY,0754);
 
             send_json = {
                 {"sort",MESSAGE},
@@ -769,7 +770,7 @@ class FTP
                 write(new_arg->stor_filefd,file_buf,file_recvcnt);
                 memset(file_buf,0,MAXBUF);
                 if(file_recvcnt == -1){
-                    stat(new_arg->stor_filename,&file_stat);
+                    stat(new_arg->stor_filename.c_str(),&file_stat);
                     if(file_stat.st_size == new_arg->stor_filesize) break;
                     usleep(100);
                 }
