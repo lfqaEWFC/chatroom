@@ -36,3 +36,5 @@ bool handle_add_group(json json_quest,json* reflact,unique_ptr<database>&db,unor
 bool deal_add_group(json json_quest,json* reflact,unique_ptr<database>&db);
 bool handle_commit_add(json json_quest,json* reflact,unique_ptr<database>&db);
 bool handle_show_group(json json_quest,json* reflact,unique_ptr<database>&db);
+bool handle_group_name(json json_quest,json* reflact,unique_ptr<database>&db);
+bool handle_group_history(json json_quest,json* reflact,unique_ptr<database>&db);

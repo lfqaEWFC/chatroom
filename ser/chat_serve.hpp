@@ -644,6 +644,20 @@ class serve{
                         sendjson(*reflact,new_args->cfd);
                     delete reflact;
                     break;
+                }
+                case(GROUP_NAME):{
+                    json *reflact = new json;
+                    if(handle_group_name(json_quest,reflact,db))
+                        sendjson(*reflact,new_args->cfd);
+                    delete reflact;
+                    break;
+                }
+                case(GROUP_HISTORY):{
+                    json *reflact = new json;
+                    if(handle_group_history(json_quest,reflact,db))
+                        sendjson(*reflact,new_args->cfd);
+                    delete reflact;
+                    break;
                 }   
             }
 

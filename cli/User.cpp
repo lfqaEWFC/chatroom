@@ -669,3 +669,78 @@ void handle_show_group(int cfd,string username)
 
     return;
 }
+
+void handle_group_name(int cfd,string username)
+{   
+    char *input;
+    char name_show[LARGESIZE];
+    char id_show[LARGESIZE];
+    json send_json;
+    long group_id;
+
+    strcpy(id_show,"请输入群聊id: ");
+
+    input = readline(id_show);
+    group_id = atoi(input);
+
+    send_json = {
+        {"request",GROUP_NAME},
+        {"username",username},
+        {"gid",group_id}
+    };
+    sendjson(send_json,cfd);
+
+    free(input);
+    return;
+}
+
+void handle_history_group(int cfd,string username,long group_id)
+{
+    json send_json;
+
+    send_json = {
+        {"sort",REFLACT},
+        {"request",GROUP_HISTORY},
+        {"gid",group_id},
+        {"username",username}
+    };
+    sendjson(send_json,cfd);
+
+    return;
+}
+
+void handle_group_chat(int cfd,string username,string group_role,long group_id,
+                       string group_name,bool end_flag)
+{
+    cout << "进入群聊模式，群名：" << group_name << endl;
+    cout << "提示：\n"
+        << "- 输入普通消息将直接发送。\n"
+        << "- 输入 /file 可传输文件。\n"
+        << "- 输入 /exit 可退出群聊模式。\n" 
+        << "- 输入 /break 可退出/解散群聊。\n" << endl;
+
+    while(true && !end_flag)
+    {
+        string message;
+        char show[MAX_REASONABLE_SIZE];
+    
+        sprintf(show,"[ %s ] %s: ",group_name.c_str(),username.c_str());
+        cout << show;        
+        getline(cin,message); 
+        if(message == "/exit")
+        {
+            
+        }
+        else if(message == "/file")
+        {
+
+        }
+        else if(message == "/break")
+        {
+
+        }
+        
+    }
+
+    return;
+}

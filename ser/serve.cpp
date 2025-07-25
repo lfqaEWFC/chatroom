@@ -1955,7 +1955,6 @@ bool handle_show_group(json json_quest,json* reflact,unique_ptr<database>&db)
             {"sort",ERROR},
             {"reflact","MYSQL SELECT ERROR..."}
         };
-        db->free_result(res);
         return true;
     }
     rows = mysql_num_rows(res);
@@ -2019,6 +2018,152 @@ bool handle_show_group(json json_quest,json* reflact,unique_ptr<database>&db)
         {"request",SHOW_GROUP},
         {"show_flag",true},
         {"elements",elements}
+    };
+
+    db->free_result(res);
+    return true;
+}
+
+bool handle_group_name(json json_quest,json* reflact,unique_ptr<database>&db)
+{
+    MYSQL_RES *res;
+    MYSQL_ROW row;
+    uint64_t rows;
+    string role;
+    string group_name;
+    string username = db->escape_mysql_string_full(json_quest["username"]);
+    long gid = json_quest["gid"];
+
+    res = db->query_sql("SELECT role FROM group_members WHERE "
+                        "group_id = '"+to_string(gid)+"' AND username = '"+username+"' AND status = 1");
+    if(res == nullptr)
+    {
+        *reflact = {
+            {"sort",ERROR},
+            {"reflact","MYSQL SELECT ERROR..."}
+        };
+        return true;
+    }
+    rows = mysql_num_rows(res);
+    if(rows <= 0)
+    {
+        *reflact = {
+            {"sort",REFLACT},
+            {"request",GROUP_NAME},
+            {"group_flag",false},
+            {"reflact","输入的gid有误..."}
+        };
+        db->free_result(res);
+        return true;
+    }
+    row = mysql_fetch_row(res);
+    role = row[0];
+    db->free_result(res);
+    res = db->query_sql("SELECT name FROM `groups` WHERE group_id = '"+to_string(gid)+"'");
+    if(res == nullptr)
+    {
+        *reflact = {
+            {"sort",ERROR},
+            {"reflact","MYSQL SELECT ERROR..."}
+        };
+        return true;
+    }
+    row = mysql_fetch_row(res);
+    group_name = row[0];
+    
+    *reflact = {
+        {"sort",REFLACT},
+        {"request",GROUP_NAME},
+        {"group_flag",true},
+        {"group_name",group_name},
+        {"gid",gid},
+        {"role",role}
+    };
+
+    db->free_result(res);
+    return true;
+}
+
+bool handle_group_history(json json_quest,json* reflact,unique_ptr<database>&db)
+{
+    string username = db->escape_mysql_string_full(json_quest["username"]);
+    long gid = json_quest["gid"];
+    bool create_chk;
+    MYSQL_ROW row;
+    MYSQL_RES* res;
+    uint64_t rows;
+    
+    res = db->query_sql("SHOW TABLES LIKE 'group_message'");
+    if(res == nullptr)
+    {
+        *reflact = {
+            {"sort",ERROR},
+            {"reflact","MYSQL SHOW ERROR..."}
+        };
+        return true;
+    }
+    if(mysql_num_rows(res) <= 0)
+    {
+        create_chk = db->execute_sql(
+            "CREATE TABLE group_message ("
+            "id BIGINT AUTO_INCREMENT PRIMARY KEY,"
+            "group_id BIGINT NOT NULL,"
+            "sender_username VARCHAR(64) NOT NULL,"
+            "message TEXT NOT NULL,"
+            "created_at DATETIME DEFAULT CURRENT_TIMESTAMP,"
+            "INDEX idx_group_id (group_id),"
+            "INDEX idx_sender (sender_username)"
+            ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;"
+        );
+        if (!create_chk) {
+            *reflact = {
+                {"sort",ERROR},
+                {"reflact","MYSQL CREATE TABLE ERROR..."}
+            };
+            return true;
+        }
+    }
+    string sql = "SELECT sender_username, message, created_at "
+                 "FROM group_message "
+                 "WHERE group_id = '" + to_string(gid) + "' "
+                 "ORDER BY created_at DESC "
+                 "LIMIT 50";
+    db->free_result(res);
+    res = db->query_sql(sql);
+    if(res == nullptr)
+    {
+        *reflact = {
+            {"sort",ERROR},
+            {"reflact","MYSQL SELECT ERROR..."}
+        };
+        return true;
+    }
+    rows = mysql_num_rows(res);
+    if(rows <= 0)
+    {
+        *reflact = {
+            {"sort",REFLACT},
+            {"request",GROUP_HISTORY},
+            {"his_flag",false},
+            {"reflact","当前暂无历史消息..."}
+        };
+        db->free_result(res);
+        return true;
+    }
+    json history_msgs = json::array();
+    while((row = mysql_fetch_row(res)) != nullptr)
+    {  
+        json msg;
+        msg["sender"] = row[0];
+        msg["content"] = row[1];
+        msg["timestamp"] = row[2];
+        history_msgs.push_back(msg);
+    }
+    *reflact = {
+        {"sort",REFLACT},
+        {"request",GROUP_HISTORY},
+        {"his_flag",true},
+        {"reflact",history_msgs}
     };
 
     db->free_result(res);

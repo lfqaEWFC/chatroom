@@ -49,8 +49,12 @@ typedef struct recv_args
     string *username;
     string *fog_username;
     string *fri_username;
+    string *group_name;
+    string *group_role;
+    long *group_id;
     bool *id_flag;
     bool *end_flag;
+    bool *group_flag;
     bool *group_add_flag;
     bool *end_start_flag;
     bool *fog_que_flag;
@@ -78,7 +82,7 @@ public:
         chat_choice(0), start_choice(0),
         cfd(in_cfd), FTP_ctrl_cfd(FTP_ctrl_cfd), client_num(client_num),
         FTP_data_stor_flag(false), FTP_data_retr_flag(false),get_file_flag(false),id_flag(false),
-        group_add_flag(false)
+        group_add_flag(false),group_flag(false)
         {
         epfd = epoll_create(EPSIZE);
         ev.data.fd = cfd;
@@ -100,6 +104,10 @@ public:
         args->end_flag = &end_flag;
         args->username = &username;
         args->pri_show = &pri_show;
+        args->group_flag = &group_flag;
+        args->group_id = &group_id;
+        args->group_name = &group_name;
+        args->group_role = &group_role;
         args->fog_username = &fog_username;
         args->fri_username = &fri_username;
         args->group_add_flag = &group_add_flag;
@@ -419,7 +427,22 @@ public:
                     case 11:
                     {
                         system("clear");
-                        
+                        handle_show_group(cfd,username);
+                        handle_pthread_wait(end_flag, &recv_cond, &recv_lock);
+                        handle_group_name(cfd,username);
+                        handle_pthread_wait(end_flag, &recv_cond, &recv_lock);
+                        if(group_flag && !end_flag)
+                        {
+                            handle_history_group(cfd,username,group_id);
+                            handle_pthread_wait(end_flag, &recv_cond, &recv_lock);
+                            handle_group_chat(cfd,username,group_role,group_id,
+                                              group_name,end_flag);
+                            group_flag = false;
+                            handle_pthread_wait(end_flag, &recv_cond, &recv_lock);
+                            wait_user_continue();
+                        }
+                        else wait_user_continue();
+                        break;
                     }
                     case 12:
                     {
@@ -463,6 +486,7 @@ private:
     bool FTP_data_retr_flag;
     bool id_flag;
     bool end_flag;
+    bool group_flag;
     bool group_add_flag;
     bool fog_que_flag;
     bool get_file_flag;
@@ -476,7 +500,10 @@ private:
     string username;
     string fri_username;
     string fog_username;
+    string group_name;
+    string group_role;
     recv_args *args;
+    long group_id;
     int start_choice;
     int chat_choice;
     struct epoll_event ev;
@@ -1136,6 +1163,39 @@ private:
                                     cout << reflact << endl;
                                 }
                                 cout << "=============================================" << endl;
+                            }
+                            else if(recvjson["request"] == GROUP_NAME){
+                                if(recvjson["group_flag"])
+                                {
+                                    *new_args->group_role = recvjson["role"];
+                                    *new_args->group_id = recvjson["gid"];
+                                    *new_args->group_name = recvjson["group_name"];
+                                    *new_args->group_flag = true;
+                                }
+                                else
+                                {
+                                    string reflact = recvjson["reflact"];
+                                    cout << reflact << endl;
+                                }
+                            }
+                            else if(recvjson["request"] == GROUP_HISTORY){
+                                if(recvjson["his_flag"])
+                                {
+                                    json history = recvjson["reflact"];
+                                    for (auto &msg : history)
+                                    {
+                                        string sender = msg["sender"];
+                                        string content = msg["content"];
+                                        string timestamp = msg["timestamp"];
+                                        cout << "[" << timestamp << "] " << sender << ": " << content << endl;
+                                    }
+                                    cout << '\n';
+                                }
+                                else
+                                {
+                                    string reflact = recvjson["reflact"];
+                                    cout << reflact << endl;
+                                }
                             }
                             else
                             {
