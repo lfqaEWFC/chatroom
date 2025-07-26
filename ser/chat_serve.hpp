@@ -23,6 +23,7 @@ typedef struct reactargs{
     unordered_map<int, string>* cfd_to_user;
     unordered_map<string ,int>* user_to_cfd;
     unordered_map<int, string>* cfd_to_buffer;
+    unordered_map<string, int>* user_to_group;
     unordered_map<string, string>* user_to_friend;      
 } reactargs;
 
@@ -32,6 +33,7 @@ typedef struct handle_recv_args{
     unordered_map<int, string>* cfd_to_user;
     unordered_map<string, int>* user_to_cfd;
     unordered_map<string, string>* user_to_friend;
+    unordered_map<string, int>* user_to_group;
 }handle_recv_args;
 
 class serve{
@@ -148,6 +150,7 @@ class serve{
                 reactarr[i].user_to_cfd = &user_to_cfd;
                 reactarr[i].cfd_to_buffer = &cfd_to_buffer;
                 reactarr[i].user_to_friend = &user_to_friend;
+                reactarr[i].user_to_group = &user_to_group;
                 if(reactarr[i].cefd == -1) 
                 {
                     perror("epoll_create");
@@ -263,10 +266,23 @@ class serve{
                                 {
                                     cout << "delete user_to_cfd" << endl;
                                     pthargs->user_to_cfd->erase(it_fd);
-                                }   
+                                }
+                                auto it_name = pthargs->user_to_friend->find(username);
+                                if(it_name != pthargs->user_to_friend->end())
+                                {
+                                    cout << "delete user_to_friend" << endl;
+                                    pthargs->user_to_friend->erase(it_name);
+                                }
+                                auto it_id = pthargs->user_to_group->find(username);
+                                if(it_id != pthargs->user_to_group->end())
+                                {
+                                    cout << "delete user_to_group" << endl;
+                                    pthargs->user_to_group->erase(it_id);
+                                }
                                 if (!db) 
                                 {
-                                    db = make_unique<database>("localhost", 0, "root", nullptr, "chat_database", "localhost", 6379);
+                                    db = make_unique<database>("localhost", 0, "root", nullptr, 
+                                                               "chat_database", "localhost", 6379);
                                     if (!db->is_connected()) 
                                     {
                                         cerr << "React Redis DB connect error" << endl;
@@ -298,11 +314,6 @@ class serve{
                             {
                                 if(errno != EAGAIN && errno != EWOULDBLOCK)
                                 {
-                                    handle_recv_args *args = new handle_recv_args;
-                                    args->cfd = evlist[i].data.fd;
-                                    args->user_to_friend = pthargs->user_to_friend;
-                                    args->cfd_to_user = pthargs->cfd_to_user;
-                                    args->user_to_cfd = pthargs->user_to_cfd;
                                     perror("recv");
                                     close(cfd);
                                     {
@@ -313,34 +324,25 @@ class serve{
                                         if(del_buffer != pthargs->cfd_to_buffer->end())
                                             pthargs->cfd_to_buffer->erase(del_buffer);
                                         if(it != pthargs->cfd_to_user->end()){
-                                            auto it_fd = pthargs->user_to_cfd->find(it->second);
-                                            if(it_fd != pthargs->user_to_cfd->end())
-                                            {
-                                                pthargs->user_to_cfd->erase(it_fd);
-                                            }  
                                             string username = it->second;
-                                            json del_online = {
-                                                {"request",LOGOUT},
-                                                {"username",username}
-                                            };
-                                            string json_str = del_online.dump();
-                                            args->json_str = json_str;
-                                            pthargs->handle_recv->addtask(handle_recv_func,args);
+                                            auto it_fd = pthargs->user_to_cfd->find(username);
+                                            if(it_fd != pthargs->user_to_cfd->end())
+                                                pthargs->user_to_cfd->erase(it_fd);
+                                            auto it_name = pthargs->user_to_friend->find(username);
+                                            if(it_name != pthargs->user_to_friend->end())
+                                                pthargs->user_to_friend->erase(it_name);
+                                            auto it_id = pthargs->user_to_group->find(username);
+                                            if(it_id != pthargs->user_to_group->end())
+                                                pthargs->user_to_group->erase(it_id);
                                             pthargs->cfd_to_user->erase(it);
                                         }
                                     }
-                                    pthargs->cfd_to_buffer->erase(cfd);
                                     break;
                                 }              
                             }
                 
                             if(n == 0)
                             {
-                                handle_recv_args *args = new handle_recv_args;
-                                args->cfd = evlist[i].data.fd;
-                                args->user_to_friend = pthargs->user_to_friend;
-                                args->cfd_to_user = pthargs->cfd_to_user;
-                                args->user_to_cfd = pthargs->user_to_cfd;
                                 close(cfd);
                                 {
                                     lock_guard<mutex> lock(pthargs->queue_mutex);
@@ -354,20 +356,16 @@ class serve{
                                         string username = it->second;
                                         auto it_fd = pthargs->user_to_cfd->find(username);
                                         if(it_fd != pthargs->user_to_cfd->end())
-                                        {
-                                            pthargs->user_to_cfd->erase(it_fd);
-                                        }  
-                                        json del_online = {
-                                            {"request",LOGOUT},
-                                            {"username",username}
-                                        };
-                                        string json_str = del_online.dump();
-                                        args->json_str = json_str;
-                                        pthargs->handle_recv->addtask(handle_recv_func,args);
+                                        pthargs->user_to_cfd->erase(it_fd); 
+                                        auto it_name = pthargs->user_to_friend->find(username);
+                                        if(it_name != pthargs->user_to_friend->end())
+                                            pthargs->user_to_friend->erase(it_name);
+                                        auto it_id = pthargs->user_to_group->find(username);
+                                        if(it_id != pthargs->user_to_group->end())
+                                            pthargs->user_to_group->erase(it_id); 
                                         pthargs->cfd_to_user->erase(it);
                                     }
                                 }
-                                pthargs->cfd_to_buffer->erase(cfd);
                                 break;
                             }
                             if (buffer.size() < 4)
@@ -387,9 +385,10 @@ class serve{
 
                             handle_recv_args *args = new handle_recv_args;
                             args->cfd = evlist[i].data.fd;
-                            args->user_to_friend = pthargs->user_to_friend;
                             args->cfd_to_user = pthargs->cfd_to_user;
                             args->user_to_cfd = pthargs->user_to_cfd;
+                            args->user_to_friend = pthargs->user_to_friend;
+                            args->user_to_group = pthargs->user_to_group;
                             args->json_str = json_str;
                     
                             buffer.erase(0, 4 + json_len);
@@ -647,7 +646,7 @@ class serve{
                 }
                 case(GROUP_NAME):{
                     json *reflact = new json;
-                    if(handle_group_name(json_quest,reflact,db))
+                    if(handle_group_name(json_quest,reflact,db,new_args->user_to_group))
                         sendjson(*reflact,new_args->cfd);
                     delete reflact;
                     break;
@@ -658,7 +657,14 @@ class serve{
                         sendjson(*reflact,new_args->cfd);
                     delete reflact;
                     break;
-                }   
+                } 
+                case(GROUP_CHAT):{
+                    json *reflact = new json;
+                    if(handle_group_chat(json_quest,reflact,db,*new_args->user_to_cfd,*new_args->user_to_group))
+                        sendjson(*reflact,new_args->cfd);
+                    delete reflact;
+                    break;
+                }  
             }
 
             delete new_args;        
@@ -679,5 +685,6 @@ class serve{
         unordered_map<string ,int> user_to_cfd;
         unordered_map<int, string> cfd_to_buffer;
         unordered_map<string,string> user_to_friend;
+        unordered_map<string, int> user_to_group;
 
 };

@@ -41,6 +41,9 @@
 #define SHOW_GROUP 39
 #define GROUP_NAME 40
 #define GROUP_HISTORY 41
+#define GROUP_CHAT 42
+#define NOT_PEER_GROUP 43
+#define PEER_GROUP 44
 #define GROUP_LEN 32
 #define REFLACT 1000
 #define FTP_PORTNUM "2100"

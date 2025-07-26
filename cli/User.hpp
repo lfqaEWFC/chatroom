@@ -41,4 +41,4 @@ void handle_show_group(int cfd,string username);
 void handle_group_name(int cfd,string username);
 void handle_history_group(int cfd,string username,long group_id);
 void handle_group_chat(int cfd,string username,string group_role,long group_id,
-                       string group_name,bool end_flag);
+                       string group_name,bool end_flag,string* group_show);

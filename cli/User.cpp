@@ -710,7 +710,7 @@ void handle_history_group(int cfd,string username,long group_id)
 }
 
 void handle_group_chat(int cfd,string username,string group_role,long group_id,
-                       string group_name,bool end_flag)
+                       string group_name,bool end_flag,string* group_show)
 {
     cout << "进入群聊模式，群名：" << group_name << endl;
     cout << "提示：\n"
@@ -719,8 +719,11 @@ void handle_group_chat(int cfd,string username,string group_role,long group_id,
         << "- 输入 /exit 可退出群聊模式。\n" 
         << "- 输入 /break 可退出/解散群聊。\n" << endl;
 
+    *group_show = "[ "+group_name+" ] "+username+": ";
+    
     while(true && !end_flag)
     {
+        json send_json;
         string message;
         char show[MAX_REASONABLE_SIZE];
     
@@ -729,17 +732,24 @@ void handle_group_chat(int cfd,string username,string group_role,long group_id,
         getline(cin,message); 
         if(message == "/exit")
         {
-            
+            break;
         }
         else if(message == "/file")
         {
-
+            continue;
         }
         else if(message == "/break")
         {
-
+            break;
         }
-        
+
+        send_json = {
+            {"request",GROUP_CHAT},
+            {"username",username},
+            {"gid",group_id},
+            {"message",message}
+        };
+        sendjson(send_json,cfd);
     }
 
     return;

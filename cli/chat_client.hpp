@@ -51,6 +51,7 @@ typedef struct recv_args
     string *fri_username;
     string *group_name;
     string *group_role;
+    string *group_show;
     long *group_id;
     bool *id_flag;
     bool *end_flag;
@@ -104,6 +105,7 @@ public:
         args->end_flag = &end_flag;
         args->username = &username;
         args->pri_show = &pri_show;
+        args->group_show = &group_show;
         args->group_flag = &group_flag;
         args->group_id = &group_id;
         args->group_name = &group_name;
@@ -436,9 +438,12 @@ public:
                             handle_history_group(cfd,username,group_id);
                             handle_pthread_wait(end_flag, &recv_cond, &recv_lock);
                             handle_group_chat(cfd,username,group_role,group_id,
-                                              group_name,end_flag);
-                            group_flag = false;
+                                              group_name,end_flag,&group_show);
                             handle_pthread_wait(end_flag, &recv_cond, &recv_lock);
+                            group_id = 0;
+                            group_role.clear();
+                            group_name.clear();
+                            group_flag = false;
                             wait_user_continue();
                         }
                         else wait_user_continue();
@@ -502,6 +507,7 @@ private:
     string fog_username;
     string group_name;
     string group_role;
+    string group_show;
     recv_args *args;
     long group_id;
     int start_choice;
@@ -737,13 +743,18 @@ private:
                     {
                         cout << "\r\033[K" << flush;
                         cout << "服务器已关闭，当前模块交互结束将退出程序...." << endl;
-                        if(!(*new_args->pri_chat_flag))
+                        if(!(*new_args->pri_chat_flag) || !(*new_args->group_flag))
                         {
                             rl_on_new_line();
                             rl_redisplay();
                         }
                         else
-                            cout << *new_args->pri_show << flush;
+                        {
+                            if(*new_args->pri_chat_flag)
+                                cout << *new_args->pri_show << flush;
+                            if(*new_args->group_flag)
+                                cout << *new_args->group_show << flush;
+                        }
                         *new_args->end_flag = true;
                         *new_args->end_chat_flag = true;
                         *new_args->end_start_flag = true;
@@ -1213,13 +1224,18 @@ private:
                                 string message  = recvjson["message"];
                                 cout << "\r\033[K" << flush;
                                 cout << message << endl;
-                                if(!(*new_args->pri_chat_flag))
+                                if(!(*new_args->pri_chat_flag) || !(*new_args->group_flag))
                                 {
                                     rl_on_new_line();
                                     rl_redisplay();
                                 }
                                 else
-                                    cout << *new_args->pri_show << flush;
+                                {
+                                    if(*new_args->pri_chat_flag)
+                                        cout << *new_args->pri_show << flush;
+                                    if(*new_args->group_flag)
+                                        cout << *new_args->group_show << flush;
+                                }
                             }
                             else if (recvjson["request"] == ADD_BLACKLIST)
                             {
@@ -1227,13 +1243,18 @@ private:
                                 *new_args->pri_chat_flag = false;
                                 cout << "\r\033[K" << flush;
                                 cout << reflact << endl;
-                                if(!(*new_args->pri_chat_flag))
+                                if(!(*new_args->pri_chat_flag) || !(*new_args->group_flag))
                                 {
                                     rl_on_new_line();
                                     rl_redisplay();
                                 }
                                 else
-                                    cout << *new_args->pri_show << flush;
+                                {
+                                    if(*new_args->pri_chat_flag)
+                                        cout << *new_args->pri_show << flush;
+                                    if(*new_args->group_flag)
+                                        cout << *new_args->group_show << flush;
+                                }
                             }
                             else if (recvjson["request"] == GET_OFFLINE_MSG)
                             {
@@ -1264,13 +1285,18 @@ private:
                                 string message = recvjson["message"];
                                 cout << "\r\033[K" << flush;
                                 cout << message << endl;
-                                if(!(*new_args->pri_chat_flag))
+                                if(!(*new_args->pri_chat_flag) || !(*new_args->group_flag))
                                 {
                                     rl_on_new_line();
                                     rl_redisplay();
                                 }
                                 else
-                                    cout << *new_args->pri_show << flush;
+                                {
+                                    if(*new_args->pri_chat_flag)
+                                        cout << *new_args->pri_show << flush;
+                                    if(*new_args->group_flag)
+                                        cout << *new_args->group_show << flush;
+                                }
                             }
                             else if (recvjson["request"] == START_FILE)
                             {
@@ -1283,13 +1309,18 @@ private:
                                     cout << "\r\033[K" << flush;
                                     cout << "client can not find file_pair" << endl;
                                     rl_on_new_line();
-                                    if(!(*new_args->pri_chat_flag))
+                                    if(!(*new_args->pri_chat_flag) || !(*new_args->group_flag))
                                     {
                                         rl_on_new_line();
                                         rl_redisplay();
                                     }
                                     else
-                                        cout << *new_args->pri_show << flush;
+                                    {
+                                        if(*new_args->pri_chat_flag)
+                                            cout << *new_args->pri_show << flush;
+                                        if(*new_args->group_flag)
+                                            cout << *new_args->group_show << flush;
+                                    }
                                     *new_args->end_flag = true;
                                     *new_args->end_start_flag = true;
                                     *new_args->end_chat_flag = true;
@@ -1301,13 +1332,18 @@ private:
                                     cout << "\r\033[K" << flush;
                                     string reflact = recvjson["reflact"];
                                     cout << reflact << endl;
-                                    if(!(*new_args->pri_chat_flag))
+                                    if(!(*new_args->pri_chat_flag) || !(*new_args->group_flag))
                                     {
                                         rl_on_new_line();
                                         rl_redisplay();
                                     }
                                     else
-                                        cout << *new_args->pri_show << flush;
+                                    {
+                                        if(*new_args->pri_chat_flag)
+                                            cout << *new_args->pri_show << flush;
+                                        if(*new_args->group_flag)
+                                            cout << *new_args->group_show << flush;
+                                    }
                                     close(file_pair->FTP_data_cfd);
                                 }
                                 pthread_cond_signal(file_pair->cond);
@@ -1319,26 +1355,36 @@ private:
                                 cout << "\r\033[K" << flush;
                                 string reflact = recvjson["reflact"];
                                 cout << reflact << endl;
-                                if(!(*new_args->pri_chat_flag))
+                                if(!(*new_args->pri_chat_flag) || !(*new_args->group_flag))
                                 {
                                     rl_on_new_line();
                                     rl_redisplay();
                                 }
                                 else
-                                    cout << *new_args->pri_show << flush;
+                                {
+                                    if(*new_args->pri_chat_flag)
+                                        cout << *new_args->pri_show << flush;
+                                    if(*new_args->group_flag)
+                                        cout << *new_args->group_show << flush;
+                                }
                                 file_args *file_pair = NULL;
                                 file_pair = find_data_num_pair(data_num, new_args->datafd_to_file_args);
                                 if (file_pair == nullptr)
                                 {
                                     cout << "\r\033[K" << flush;
                                     cout << "client can not find file_pair" << endl;
-                                    if(!(*new_args->pri_chat_flag))
+                                    if(!(*new_args->pri_chat_flag) || !(*new_args->group_flag))
                                     {
                                         rl_on_new_line();
                                         rl_redisplay();
                                     }
                                     else
-                                        cout << *new_args->pri_show << flush;
+                                    {
+                                        if(*new_args->pri_chat_flag)
+                                            cout << *new_args->pri_show << flush;
+                                        if(*new_args->group_flag)
+                                            cout << *new_args->group_show << flush;
+                                    }
                                     *new_args->end_flag = true;
                                     *new_args->end_start_flag = true;
                                     *new_args->end_chat_flag = true;
@@ -1358,13 +1404,18 @@ private:
                                 string message = recvjson["message"];
                                 cout << "\r\033[K" << flush;
                                 cout << message << endl;
-                                if(!(*new_args->pri_chat_flag))
+                                if(!(*new_args->pri_chat_flag) || !(*new_args->group_flag))
                                 {
                                     rl_on_new_line();
                                     rl_redisplay();
                                 }
                                 else
-                                    cout << *new_args->pri_show << flush;
+                                {
+                                    if(*new_args->pri_chat_flag)
+                                        cout << *new_args->pri_show << flush;
+                                    if(*new_args->group_flag)
+                                        cout << *new_args->group_show << flush;
+                                }
                             }
                             else if (recvjson["request"] == STOR_START)
                             {
@@ -1373,26 +1424,36 @@ private:
                                 cout << "\r\033[K" << flush;
                                 string reflact = recvjson["reflact"];
                                 cout << reflact << endl;
-                                if(!(*new_args->pri_chat_flag))
+                                if(!(*new_args->pri_chat_flag) || !(*new_args->group_flag))
                                 {
                                     rl_on_new_line();
                                     rl_redisplay();
                                 }
                                 else
-                                    cout << *new_args->pri_show << flush;
+                                {
+                                    if(*new_args->pri_chat_flag)
+                                        cout << *new_args->pri_show << flush;
+                                    if(*new_args->group_flag)
+                                        cout << *new_args->group_show << flush;
+                                }
                                 file_args *file_pair = NULL;
                                 file_pair = find_data_num_pair(data_num, new_args->datafd_to_file_args);
                                 if (file_pair == nullptr)
                                 {
                                     cout << "\r\033[K" << flush;
                                     cout << "client can not find file_pair" << endl;
-                                    if(!(*new_args->pri_chat_flag))
+                                    if(!(*new_args->pri_chat_flag) || !(*new_args->group_flag))
                                     {
                                         rl_on_new_line();
                                         rl_redisplay();
                                     }
                                     else
-                                        cout << *new_args->pri_show << flush;
+                                    {
+                                        if(*new_args->pri_chat_flag)
+                                            cout << *new_args->pri_show << flush;
+                                        if(*new_args->group_flag)
+                                            cout << *new_args->group_show << flush;
+                                    }
                                     *new_args->end_flag = true;
                                     *new_args->end_start_flag = true;
                                     *new_args->end_chat_flag = true;
@@ -1413,26 +1474,36 @@ private:
                                 cout << "\r\033[K" << flush;
                                 string reflact = recvjson["reflact"];
                                 cout << reflact << endl;
-                                if(!(*new_args->pri_chat_flag))
+                                if(!(*new_args->pri_chat_flag) || !(*new_args->group_flag))
                                 {
                                     rl_on_new_line();
                                     rl_redisplay();
                                 }
                                 else
-                                    cout << *new_args->pri_show << flush;
+                                {
+                                    if(*new_args->pri_chat_flag)
+                                        cout << *new_args->pri_show << flush;
+                                    if(*new_args->group_flag)
+                                        cout << *new_args->group_show << flush;
+                                }
                                 file_args *file_pair = NULL;
                                 file_pair = find_data_num_pair(data_num, new_args->datafd_to_file_args);
                                 if (file_pair == nullptr)
                                 {
                                     cout << "\r\033[K" << flush;
                                     cout << "client can not find file_pair" << endl;
-                                    if(!(*new_args->pri_chat_flag))
+                                    if(!(*new_args->pri_chat_flag) || !(*new_args->group_flag))
                                     {
                                         rl_on_new_line();
                                         rl_redisplay();
                                     }
                                     else
-                                        cout << *new_args->pri_show << flush;
+                                    {
+                                        if(*new_args->pri_chat_flag)
+                                            cout << *new_args->pri_show << flush;
+                                        if(*new_args->group_flag)
+                                            cout << *new_args->group_show << flush;
+                                    }
                                     *new_args->end_flag = true;
                                     *new_args->end_start_flag = true;
                                     *new_args->end_chat_flag = true;
@@ -1447,25 +1518,63 @@ private:
                                 string message = recvjson["message"];
                                 cout << "\r\033[K" << flush;
                                 cout << message << endl;
-                                if(!(*new_args->pri_chat_flag))
+                                if(!(*new_args->pri_chat_flag) || !(*new_args->group_flag))
                                 {
                                     rl_on_new_line();
                                     rl_redisplay();
                                 }
                                 else
-                                    cout << *new_args->pri_show << flush;
+                                {
+                                    if(*new_args->pri_chat_flag)
+                                        cout << *new_args->pri_show << flush;
+                                    if(*new_args->group_flag)
+                                        cout << *new_args->group_show << flush;
+                                }
                             }
                             else if(recvjson["request"] == ADD_GROUP){
                                 string message = recvjson["message"];
                                 cout << "\r\033[K" << flush;
                                 cout << message << endl;
-                                if(!(*new_args->pri_chat_flag))
+                                if(!(*new_args->pri_chat_flag) || !(*new_args->group_flag))
                                 {
                                     rl_on_new_line();
                                     rl_redisplay();
                                 }
                                 else
-                                    cout << *new_args->pri_show << flush;
+                                {
+                                    if(*new_args->pri_chat_flag)
+                                        cout << *new_args->pri_show << flush;
+                                    if(*new_args->group_flag)
+                                        cout << *new_args->group_show << flush;
+                                }
+                            }
+                            else if(recvjson["request"] == NOT_PEER_GROUP)
+                            {   
+                                string message = recvjson["message"];
+                                cout << "\r\033[K" << flush;
+                                cout << message << endl;
+                                if(!(*new_args->pri_chat_flag) || !(*new_args->group_flag))
+                                {
+                                    rl_on_new_line();
+                                    rl_redisplay();
+                                }
+                                else
+                                {
+                                    if(*new_args->pri_chat_flag)
+                                        cout << *new_args->pri_show << flush;
+                                    if(*new_args->group_flag)
+                                        cout << *new_args->group_show << flush;
+                                }
+                            }
+                            else if(recvjson["request"] == PEER_GROUP)
+                            {
+                                string sender = recvjson["sender"];
+                                string message = recvjson["message"];
+                                string show;
+                                cout << "\r\033[K" << flush;
+                                cout << "[ "+*new_args->group_name+" ] "+sender+": ";
+                                cout << message << endl;
+                                cout << *new_args->pri_show << flush;
                             }
                             continue;
                         }
@@ -1473,13 +1582,18 @@ private:
                         {
                             cout << "\r\033[K" << flush;
                             cout << "发生错误 : " << recvjson["reflact"] << endl;
-                            if(!(*new_args->pri_chat_flag))
+                            if(!(*new_args->pri_chat_flag) || !(*new_args->group_flag))
                             {
                                 rl_on_new_line();
                                 rl_redisplay();
                             }
                             else
-                                cout << *new_args->pri_show << flush;
+                            {
+                                if(*new_args->pri_chat_flag)
+                                    cout << *new_args->pri_show << flush;
+                                if(*new_args->group_flag)
+                                    cout << *new_args->group_show << flush;
+                            }
                             *new_args->end_flag = true;
                             *new_args->end_start_flag = true;
                             *new_args->end_chat_flag = true;
@@ -1490,13 +1604,18 @@ private:
                         {
                             cout << "\r\033[K" << flush;
                             cout << "接受信息类型错误: " << recvjson["sort"] << endl;
-                            if(!(*new_args->pri_chat_flag))
+                            if(!(*new_args->pri_chat_flag) || !(*new_args->group_flag))
                             {
                                 rl_on_new_line();
                                 rl_redisplay();
                             }
                             else
-                                cout << *new_args->pri_show << flush;
+                            {
+                                if(*new_args->pri_chat_flag)
+                                    cout << *new_args->pri_show << flush;
+                                if(*new_args->group_flag)
+                                    cout << *new_args->group_show << flush;
+                            }
                             *new_args->end_flag = true;
                             *new_args->end_start_flag = true;
                             *new_args->end_chat_flag = true;
