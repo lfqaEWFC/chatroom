@@ -33,7 +33,6 @@ void menu::chat_show(){
     cout << "11.群聊模式" << endl;
     cout << "12.查看加群申请" << endl;
     cout << "13.查看群聊列表" << endl;
-    cout << "后面的功能有待完善..." << endl;
 
     return;
 }

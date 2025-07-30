@@ -1,5 +1,5 @@
-#include "/home/mcy-mcy/文档/chatroom/include/inetsockets_tcp.hpp"
-#include "/home/mcy-mcy/文档/chatroom/ser/chat_serve.hpp"
+#include "include/inetsockets_tcp.hpp"
+#include "ser/chat_serve.hpp"
 
 
 int main(int argc,char **argv){

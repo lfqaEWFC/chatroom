@@ -1,5 +1,5 @@
 #include "chat_client.hpp"
-#include "/home/mcy-mcy/文档/chatroom/define/define.hpp"
+#include "define/define.hpp"
 
 using namespace std;
 

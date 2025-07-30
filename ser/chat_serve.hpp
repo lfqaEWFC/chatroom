@@ -1,7 +1,7 @@
-#include "/home/mcy-mcy/文档/chatroom/include/inetsockets_tcp.hpp"
-#include "/home/mcy-mcy/文档/chatroom/define/define.hpp"
-#include "/home/mcy-mcy/文档/chatroom/include/Threadpool.hpp"
-#include "/home/mcy-mcy/文档/chatroom/Database/Database.hpp"
+#include "include/inetsockets_tcp.hpp"
+#include "define/define.hpp"
+#include "include/Threadpool.hpp"
+#include "Database/Database.hpp"
 #include "serve.hpp"
 #include <sys/epoll.h>
 #include <sys/eventfd.h>

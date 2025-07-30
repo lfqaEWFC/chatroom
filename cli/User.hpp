@@ -5,8 +5,8 @@
 #include <iomanip>
 #include <readline/readline.h>
 #include <readline/history.h>
-#include "/home/mcy-mcy/文档/chatroom/define/define.hpp"
-#include "/home/mcy-mcy/文档/chatroom/include/inetsockets_tcp.hpp"
+#include "define/define.hpp"
+#include "include/inetsockets_tcp.hpp"
 
 using json = nlohmann::json;
 using namespace std; 

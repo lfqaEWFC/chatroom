@@ -1,7 +1,7 @@
 #ifndef FTP_HPP
-#include"/home/mcy-mcy/文档/chatroom/include/inetsockets_tcp.hpp"
-#include"/home/mcy-mcy/文档/chatroom/include/Threadpool.hpp"
-#include"/home/mcy-mcy/文档/chatroom/define/define.hpp"
+#include"include/inetsockets_tcp.hpp"
+#include"include/Threadpool.hpp"
+#include"define/define.hpp"
 #include<fcntl.h>
 #include<sys/epoll.h>
 #include<iostream>
