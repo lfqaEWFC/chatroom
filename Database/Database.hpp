@@ -27,6 +27,7 @@ class database{
     string escape_mysql_string_full(const std::string& input);
 
     redisReply* execRedis(const string& command);
+    redisContext* get_redis_conn();
     bool lpushJson(const string& key, const json& json_data);
     bool redis_del_online_user(const string& username);
     void free_reply(redisReply* reply);

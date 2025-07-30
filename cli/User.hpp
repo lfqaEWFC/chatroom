@@ -29,9 +29,11 @@ void handle_check_friend(string username,int cfd);
 void handle_delete_friend(string username,int cfd);
 void handle_pthread_wait(bool endflag,pthread_cond_t *cond,pthread_mutex_t *mutex);
 int handle_pasv(string reflact);
-void handle_show_file(string username, int cfd,string* fri_username);
+void handle_show_file(string username, int cfd,bool endflag,
+                      pthread_cond_t* cond,pthread_mutex_t* mutex,
+                      bool* pri_chat_flag,bool* group_flag);
 void handle_retr_file(int FTP_ctrl_cfd,bool endflag,pthread_mutex_t* mutex,string* fri_username,
-                      pthread_cond_t* cond,bool* FTP_retr_flag,string* file_name);
+                      pthread_cond_t* cond,bool* FTP_retr_flag,string* file_name,bool group_flag);
 void handle_create_group(string username,int cfd);
 void handle_add_group(string username,int cfd,bool end_flag,bool* id_flag,
                       pthread_cond_t* cond,pthread_mutex_t* mutex);
@@ -41,4 +43,8 @@ void handle_show_group(int cfd,string username);
 void handle_group_name(int cfd,string username);
 void handle_history_group(int cfd,string username,long group_id);
 void handle_group_chat(int cfd,string username,string group_role,long group_id,
-                       string group_name,bool end_flag,string* group_show);
+                       string group_name,bool end_flag,string* group_show,
+                       pthread_cond_t *cond,pthread_mutex_t *mutex,string* file_path,
+                       int FTP_ctrl_cfd,bool* FTP_stor_flag,bool* group_flag);
+void show_group_members(int cfd,string username,long gid);
+void show_user_friend(int cfd,string username);

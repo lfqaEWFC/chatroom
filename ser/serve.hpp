@@ -37,9 +37,9 @@ bool handle_check_friend(json json_quest,json *reflact,unique_ptr<database>&db,
                          unordered_map<int, string>* cfd_to_user);
 bool handle_del_friend(json json_quest,json *reflact,unique_ptr<database>&db);
 bool handle_add_file(json json_quest,json *reflact,unique_ptr<database>&db,
-                     unordered_map<int, string> cfd_to_user,unordered_map<string,string>user_to_friend);
+                     unordered_map<int, string> cfd_to_user,unordered_map<string,string>user_to_friend,
+                     unordered_map<string, int> user_to_cfd,unordered_map<string,int> user_to_group);
 bool handle_show_file(json json_quest,json *reflact,unique_ptr<database>&db);
-bool handle_del_retr(json json_quest,json* reflact,unique_ptr<database>&db);
 bool handle_create_group(json json_quest,json* reflact,unique_ptr<database>&db);
 bool handle_select_group(json json_quest,json* reflact,unique_ptr<database>&db);
 bool handle_add_group(json json_quest,json* reflact,unique_ptr<database>&db,unordered_map<string,int> user_to_cfd);
@@ -51,3 +51,14 @@ bool handle_group_name(json json_quest,json* reflact,unique_ptr<database>&db,
 bool handle_group_history(json json_quest,json* reflact,unique_ptr<database>&db);
 bool handle_group_chat(json json_quest,json* reflact,unique_ptr<database>&db,
                        unordered_map<string, int> user_to_cfd,unordered_map<string,int> user_to_group);
+bool handle_group_end(json json_quest,json* reflact,unique_ptr<database>&db,
+                      unordered_map<string,int>* user_to_group);
+bool handle_show_member(json json_quest,json *reflact,unique_ptr<database>&db);
+bool handle_add_admin(json json_quest,json *reflact,unique_ptr<database>&db,unordered_map<string,int> user_to_cfd);
+bool handle_show_friend(json json_quest,json *reflact,unique_ptr<database>&db);
+bool handle_add_member(json json_quest,json *reflact,unique_ptr<database>&db,unordered_map<string,int> user_to_cfd);
+bool handle_break_group(json json_quest,json *reflact,unique_ptr<database>&db,
+                        unordered_map<string,int> user_to_cfd,unordered_map<string,int> user_to_group);
+bool handle_kill_user(json json_quest,json *reflact,unique_ptr<database>&db,
+                      unordered_map<string,int> user_to_cfd,unordered_map<string,int> user_to_group);
+bool handle_del_group(json json_quest,json *reflact,unique_ptr<database>&db,unordered_map<string,int> user_to_cfd);

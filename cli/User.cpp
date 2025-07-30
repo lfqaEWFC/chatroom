@@ -235,6 +235,7 @@ void handle_pri_chat(string username,string fri_user,int cfd,int FTP_ctrl_cfd,bo
         string message = input;
     
         if (message == "/file") {
+            cout << endl;
             char file_show[MAX_REASONABLE_SIZE];
             strcpy(file_show,"请输入命令：");
             *pri_show = "请输入命令：";
@@ -475,57 +476,144 @@ int handle_pasv(string reflact)
     return data_cfd;
 }
 
-void handle_show_file(string username, int cfd, string* fri_username)
+void handle_show_file(string username, int cfd,bool endflag,
+                      pthread_cond_t* cond,pthread_mutex_t* mutex,
+                      bool* pri_chat_flag,bool* group_flag)
 {
-    char *fri_user;
-    char retr_show[MSGBUF];
+    int num;
+    long gid;
+    char *input;
+    char show[MSGBUF];
+    
+    cout << "=============" << endl;
+    cout << " 1.私聊模式 " << endl;
+    cout << " 2.群聊模式 " << endl;
+    cout << "=============" << endl;
 
-    strcpy(retr_show,"请输入对端用户或群组名称: ");
-    fri_user = readline(retr_show);
+    while(true)
+    {
+        strcpy(show,"请选择私聊或者群聊模式：");
+        input = readline(show);
+        num = atoi(input);
+        if(num != 1 && num != 2){
+           cout << "请您输入正确的选项..." << endl; 
+           free(input);
+           continue;
+        }
+        free(input);
+        break;
+    }
 
-    json send_json = {
-        {"request",SHOW_FILE},
-        {"fri_user",fri_user},
-        {"username",username}
-    };
-    sendjson(send_json,cfd);
-
-    *fri_username = fri_user;
-
-    free(fri_user);
+    if(num == 1)
+    {
+        *pri_chat_flag = true;
+        strcpy(show,"请输入对端用户名称：");
+        input = readline(show);
+        json send_json = {
+            {"request",SHOW_FILE},
+            {"group_flag",false},
+            {"sender",input},
+            {"username",username}
+        };
+        sendjson(send_json,cfd);
+        free(input);
+    }
+    if(num == 2)
+    {
+        *group_flag = true;
+        handle_show_group(cfd,username);
+        handle_pthread_wait(endflag,cond,mutex);
+        strcpy(show,"请输入群聊id: ");
+        while(true){
+            input = readline(show);
+            gid = atoi(input);
+            if(gid == 0)
+            {
+                cout << "请输入正确的群聊id" << endl;
+                free(input);
+                continue;
+            } 
+            free(input);
+            break;
+        }
+        json send_json = {
+            {"group_flag",true},
+            {"request",SHOW_FILE},
+            {"group_id",gid}
+        };
+        sendjson(send_json,cfd);
+    }
+    
     return;
 }
 
 void handle_retr_file(int FTP_ctrl_cfd,bool endflag,pthread_mutex_t* mutex,string* fri_username,
-                      pthread_cond_t* cond,bool* FTP_retr_flag,string* file_name)
+                      pthread_cond_t* cond,bool* FTP_retr_flag,string* file_name,bool group_flag)
 {
     int cfd = FTP_ctrl_cfd;
     char fileshow[MSGBUF];
 
     cout << "进入文件接收模式,输入EXIT退出" << endl;
-    while(true && !endflag){
-        strcpy(fileshow,"请输入文件名称: ");
-        char* filename = readline(fileshow);
-        if(strcmp(filename,"EXIT") == 0)
-        {
-            cout << "退出文件接收模式..." << endl;
-            wait_user_continue();
-            fri_username->clear();
-            free(filename);
-            return;
-        }
-        else
-        {
+
+    if(group_flag)
+    {
+        string sender;
+        string filename;
+        char *file_input;
+        while(true){
+            strcpy(fileshow,"请输入文件发送者：");
+            file_input = readline(fileshow);
+            if(strcmp(file_input,"EXIT") == 0)
+            {
+                cout << "退出文件接收模式..." << endl;
+                wait_user_continue();
+                fri_username->clear();
+                free(file_input);
+                return;
+            }
+            sender = file_input;
+            *fri_username = sender;
+            free(file_input);
+            strcpy(fileshow,"请输入文件名称：");
+            file_input = readline(fileshow);  
+            filename = file_input;
             *file_name = filename;
+            free(file_input);
             json send_json = {
                 {"cmd","PASV"},
                 {"filename",filename}
             };
             sendjson(send_json,cfd);
-        }
-        *FTP_retr_flag = true;
+                    *FTP_retr_flag = true;
         handle_pthread_wait(endflag,cond,mutex);
-        free(filename);
+        }
+    }
+    else
+    {
+        while(true && !endflag){
+            strcpy(fileshow,"请输入文件名称: ");
+            char* filename = readline(fileshow);
+            if(strcmp(filename,"EXIT") == 0)
+            {
+                cout << "退出文件接收模式..." << endl;
+                wait_user_continue();
+                fri_username->clear();
+                free(filename);
+                return;
+            }
+            else
+            {
+                *file_name = filename;
+                json send_json = {
+                    {"cmd","PASV"},
+                    {"filename",filename}
+                };
+                sendjson(send_json,cfd);
+            }
+            *FTP_retr_flag = true;
+            handle_pthread_wait(endflag,cond,mutex);
+            free(filename);
+        }
     }
 
     return;
@@ -710,18 +798,31 @@ void handle_history_group(int cfd,string username,long group_id)
 }
 
 void handle_group_chat(int cfd,string username,string group_role,long group_id,
-                       string group_name,bool end_flag,string* group_show)
+                       string group_name,bool end_flag,string* group_show,
+                       pthread_cond_t *cond,pthread_mutex_t *mutex,string* file_path,
+                       int FTP_ctrl_cfd,bool* FTP_stor_flag,bool* group_flag)
 {
     cout << "进入群聊模式，群名：" << group_name << endl;
     cout << "提示：\n"
         << "- 输入普通消息将直接发送。\n"
         << "- 输入 /file 可传输文件。\n"
-        << "- 输入 /exit 可退出群聊模式。\n" 
-        << "- 输入 /break 可退出/解散群聊。\n" << endl;
+        << "- 输入 /exit 可退出群聊模式。\n"
+        << "- 输入 /add 可邀请好友加入群聊。\n";
+    
+    if(group_role == "owner")
+    {
+        cout << "- 输入 /break 可解散群聊。\n"
+            << "- 输入 /admin 可以添加或者删除管理员。\n";
+    }
+    if(group_role == "admin" || group_role == "owner")
+        cout << "- 输入 /kill 可退出移除用户。\n";
+    if(group_role == "admin" || group_role == "member")
+        cout << "- 输入 /delete 可退出群聊。 \n";
+    cout << endl;
 
     *group_show = "[ "+group_name+" ] "+username+": ";
     
-    while(true && !end_flag)
+    while(true && !end_flag && *group_flag)
     {
         json send_json;
         string message;
@@ -730,16 +831,206 @@ void handle_group_chat(int cfd,string username,string group_role,long group_id,
         sprintf(show,"[ %s ] %s: ",group_name.c_str(),username.c_str());
         cout << show;        
         getline(cin,message); 
+        if(end_flag || !(*group_flag)) break;
+        
         if(message == "/exit")
         {
+            send_json = {
+              {"request",GROUP_END},
+              {"username",username},
+              {"gid",group_id}  
+            };
+            sendjson(send_json,cfd);
+            handle_pthread_wait(end_flag,cond,mutex);
             break;
         }
         else if(message == "/file")
         {
+            cout << endl;
+            char file_show[MAX_REASONABLE_SIZE];
+            strcpy(file_show,"请输入命令：");
+            *group_show = "请输入命令：";
+
+            cout << "进入文件传输模式：" << endl;
+            cout << "提示：\n"
+                << "- 输入 EXIT 退出文件传输模式。\n"
+                << "- 输入 LIST + 路径名 将列出目录。\n"
+                << "- 输入 STOR + 文件路径 可传输文件。\n"
+                << "- 当前尚不支持文件名有特殊字符的文件传输\n" << endl;
+
+            while (true && !end_flag && *group_flag){
+                char *file_input = readline(file_show);
+
+                if(strstr(file_input,"LIST")){
+                    char *cmd = NULL;
+                    char *path = NULL;
+                    char *saveptr = NULL;
+                    
+                    cmd = strtok_r(file_input, " \n", &saveptr);
+                    path = strtok_r(NULL, " \n", &saveptr);
+
+                    json send_json;
+                    if(path != NULL){
+                        send_json = {
+                            {"cmd","LIST"},
+                            {"path",path},
+                            {"run_flag",true}
+                        };
+                    }
+                    else{
+                        send_json = {
+                            {"cmd","LIST"},
+                            {"run_flag",false}
+                        };
+                    }
+                    sendjson(send_json,FTP_ctrl_cfd);
+                    handle_pthread_wait(end_flag,cond,mutex);
+                }
+                else if(strstr(file_input,"STOR")){                    
+                    string input_str(file_input);
+                    size_t pos = input_str.find(' ');
+                    string filepath;
+                    if (pos != string::npos) {
+                        filepath = input_str.substr(pos + 1);
+                        if (filepath.empty()) {
+                            cout << "命令格式错误，应为: STOR <文件路径>" << endl;
+                            continue;
+                        }
+                        int fd = open(filepath.c_str(), O_RDONLY);
+                        if (fd == -1) {
+                            cout << "文件不存在或无法读取: " << filepath << endl;
+                            continue;
+                        }
+                        close(fd);                
+                    }
+                    else {
+                        cout << "命令格式错误，应为: STOR <文件路径>" << endl;
+                        continue;
+                    }
+                    *FTP_stor_flag = true;
+
+                    json send_json = {
+                        {"cmd","PASV"},
+                        {"filepath",filepath}
+                    };
+                    sendjson(send_json,FTP_ctrl_cfd);
+                    *file_path = filepath;
+                    handle_pthread_wait(end_flag,cond,mutex);
+                } 
+                else if(strcmp(file_input,"EXIT") == 0){
+                    cout << "退出文件传输模式..." << endl;
+                    cout << endl;
+                    *group_show = "[ "+group_name+" ] "+username+": ";
+                    break;
+                }
+                else{
+                    cout << "命令错误，请重新输入命令..." << endl;
+                    continue;
+                }
+                free(file_input);         
+            }
+            continue;
+        }
+        else if(message == "/admin")
+        {   
+            char *admin;
+            char show[MSGBUF];
+            json send_json;
+
+            if(group_role != "owner")
+                cout << "你没有权限执行此操作..." << endl;
+            else
+            {
+                show_group_members(cfd,username,group_id);
+                handle_pthread_wait(end_flag,cond,mutex);
+                strcpy(show,"请输入成员名称：");
+                admin = readline(show);
+                send_json = {
+                    {"request",ADD_ADMIN},
+                    {"addname",admin},
+                    {"group_id",group_id},
+                    {"username",username}
+                };
+                sendjson(send_json,cfd);
+                free(admin);
+            }
+            handle_pthread_wait(end_flag,cond,mutex);
+            continue;
+        }
+        else if(message == "/add")
+        {
+            char *admem;
+            char show[MSGBUF];
+            json send_json;
+
+            show_user_friend(cfd,username);
+            handle_pthread_wait(end_flag,cond,mutex);
+            strcpy(show,"请输入需要邀请的用户：");
+            admem = readline(show);
+            send_json = {
+                {"request",ADD_GROUP_MEM},
+                {"addname",admem},
+                {"gid",group_id},
+                {"username",username}
+            };
+            sendjson(send_json,cfd);
+            handle_pthread_wait(end_flag,cond,mutex);
+            free(admem);
             continue;
         }
         else if(message == "/break")
         {
+            if(group_role != "owner")
+                cout << "你没有权限执行这个操作..." << endl;
+            else
+            {
+                json send_json = {
+                    {"request",BREAK_GROUP},
+                    {"username",username},
+                    {"gid",group_id}
+                };
+                sendjson(send_json,cfd);
+            }
+            handle_pthread_wait(end_flag,cond,mutex);
+            break;
+        }
+        else if(message == "/kill")
+        {
+            if(group_role == "member")
+                cout << "你没有权限执行这个操作..." << endl;
+            else
+            {
+                char *kill;
+                char show[MSGBUF];
+                json send_json;
+
+                show_group_members(cfd,username,group_id);
+                handle_pthread_wait(end_flag,cond,mutex);
+                strcpy(show,"请输入需要移除的用户：");
+                kill = readline(show);
+                send_json = {
+                    {"request",KILL_GROUP_USER},
+                    {"username",username},
+                    {"kill_user",kill},
+                    {"gid",group_id}
+                };
+                sendjson(send_json,cfd);
+                free(kill);
+            }
+            handle_pthread_wait(end_flag,cond,mutex);
+            continue;
+        }
+        else if(message == "/delete")
+        {
+            if(group_role == "owner")
+                cout << "群主只能解散群聊..." << endl;
+            json send_json = {
+                {"request",DELETE_GROUP},
+                {"username",username},
+                {"gid",group_id}
+            };
+            sendjson(send_json,cfd);
+            handle_pthread_wait(end_flag,cond,mutex);
             break;
         }
 
@@ -751,6 +1042,29 @@ void handle_group_chat(int cfd,string username,string group_role,long group_id,
         };
         sendjson(send_json,cfd);
     }
+    
+    return;
+}
+
+void show_group_members(int cfd,string username,long gid)
+{
+    json send_json = {
+        {"request",SHOW_MEMBER},
+        {"username",username},
+        {"gid",gid}
+    };
+    sendjson(send_json,cfd);
+
+    return;
+}
+
+void show_user_friend(int cfd,string username)
+{
+    json send_json = {
+        {"request",SHOW_FRIEND},
+        {"username",username}
+    };
+    sendjson(send_json,cfd);
 
     return;
 }

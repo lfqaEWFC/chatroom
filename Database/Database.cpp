@@ -69,6 +69,10 @@ redisReply* database::execRedis(const std::string& command){
     return reply;
 }
 
+redisContext* database::get_redis_conn(){
+    return redis_conn;
+}
+
 void database::free_result(MYSQL_RES* result){
     if (result) {
         mysql_free_result(result);

@@ -288,7 +288,15 @@ class serve{
                                         cerr << "React Redis DB connect error" << endl;
                                     }
                                 }
-                                db->redis_del_online_user(username);
+                                string redis_key = "offline:logout_time";
+                                redisContext *redis = db->get_redis_conn();
+                                string timestamp = get_current_mysql_timestamp();
+                                const char* argv[] = {"HSET", redis_key.c_str(), 
+                                                      username.c_str(), timestamp.c_str()};
+                                size_t argvlen[] = {4, redis_key.size(), username.size(), timestamp.size()};
+                                redisReply* reply = (redisReply*)redisCommandArgv(redis, 4, argv, argvlen);
+                                if(reply) freeReplyObject(reply);
+                                cout << "logout_time change" << endl;
                             }
                             pthargs->cnt--;
                         }
@@ -314,8 +322,9 @@ class serve{
                             {
                                 if(errno != EAGAIN && errno != EWOULDBLOCK)
                                 {
-                                    perror("recv");
                                     close(cfd);
+                                    perror("recv");
+                                    static thread_local unique_ptr<database> db = nullptr;
                                     {
                                         lock_guard<mutex> lock(pthargs->queue_mutex);
                                         pthargs->cnt--;
@@ -325,6 +334,29 @@ class serve{
                                             pthargs->cfd_to_buffer->erase(del_buffer);
                                         if(it != pthargs->cfd_to_user->end()){
                                             string username = it->second;
+                                            if (!db) 
+                                            {
+                                                db = make_unique<database>("localhost", 0, 
+                                                                           "root", nullptr, 
+                                                                           "chat_database", 
+                                                                           "localhost", 6379);
+                                                if (!db->is_connected()) 
+                                                {
+                                                    cerr << "React Redis DB connect error" << endl;
+                                                }
+                                            }
+                                            string redis_key = "offline:logout_time";
+                                            redisContext *redis = db->get_redis_conn();
+                                            string timestamp = get_current_mysql_timestamp();
+                                            const char* argv[] = {"HSET", redis_key.c_str(), 
+                                                                  username.c_str(), timestamp.c_str()};
+                                            size_t argvlen[] = {4, redis_key.size(), username.size(), 
+                                                                timestamp.size()};
+                                            redisReply* reply = (redisReply*)redisCommandArgv(redis, 4, 
+                                                                argv, argvlen);
+                                            if(reply)
+                                                freeReplyObject(reply);
+                                            cout << "logout_time change" << endl;
                                             auto it_fd = pthargs->user_to_cfd->find(username);
                                             if(it_fd != pthargs->user_to_cfd->end())
                                                 pthargs->user_to_cfd->erase(it_fd);
@@ -340,34 +372,9 @@ class serve{
                                     break;
                                 }              
                             }
-                
                             if(n == 0)
-                            {
-                                close(cfd);
-                                {
-                                    lock_guard<mutex> lock(pthargs->queue_mutex);
-                                    pthargs->cnt--;
-                                    auto it = pthargs->cfd_to_user->find(cfd);
-                                    auto del_buffer = pthargs->cfd_to_buffer->find(cfd);
-                                    if(del_buffer != pthargs->cfd_to_buffer->end())
-                                        pthargs->cfd_to_buffer->erase(del_buffer);
-                                    if(it != pthargs->cfd_to_user->end())
-                                    {
-                                        string username = it->second;
-                                        auto it_fd = pthargs->user_to_cfd->find(username);
-                                        if(it_fd != pthargs->user_to_cfd->end())
-                                        pthargs->user_to_cfd->erase(it_fd); 
-                                        auto it_name = pthargs->user_to_friend->find(username);
-                                        if(it_name != pthargs->user_to_friend->end())
-                                            pthargs->user_to_friend->erase(it_name);
-                                        auto it_id = pthargs->user_to_group->find(username);
-                                        if(it_id != pthargs->user_to_group->end())
-                                            pthargs->user_to_group->erase(it_id); 
-                                        pthargs->cfd_to_user->erase(it);
-                                    }
-                                }
                                 break;
-                            }
+                                
                             if (buffer.size() < 4)
                             {
                                 cout << "end len: " << buffer.size() <<endl;
@@ -583,7 +590,8 @@ class serve{
                 }
                 case(ADD_FILE):{
                     json *reflact = new json;
-                    if(handle_add_file(json_quest,reflact,db,*new_args->cfd_to_user,*new_args->user_to_friend))
+                    if(handle_add_file(json_quest,reflact,db,*new_args->cfd_to_user,*new_args->user_to_friend,
+                                       *new_args->user_to_cfd,*new_args->user_to_group))
                         sendjson(*reflact,new_args->cfd);
                     delete reflact;
                     break;
@@ -591,14 +599,7 @@ class serve{
                 case(SHOW_FILE):{
                     json *reflact = new json;
                     if(handle_show_file(json_quest,reflact,db))
-                        sendjson(*reflact,new_args->cfd);
-                    delete reflact;
-                    break;
-                }
-                case(END_RETR):{
-                    json *reflact = new json;
-                    if(handle_del_retr(json_quest,reflact,db))
-                        sendjson(*reflact,new_args->cfd);
+                        sendjson(*reflact,new_args->cfd);   
                     delete reflact;
                     break;
                 }
@@ -664,7 +665,63 @@ class serve{
                         sendjson(*reflact,new_args->cfd);
                     delete reflact;
                     break;
+                }
+                case(GROUP_END):{
+                    json *reflact = new json;
+                    if(handle_group_end(json_quest,reflact,db,new_args->user_to_group))
+                        sendjson(*reflact,new_args->cfd);
+                    delete reflact;
+                    break;
+                }
+                case(SHOW_MEMBER):{
+                    json *reflact = new json;
+                    if(handle_show_member(json_quest,reflact,db))
+                        sendjson(*reflact,new_args->cfd);
+                    delete reflact;
+                    break;
                 }  
+                case(ADD_ADMIN):{
+                    json *reflact = new json;
+                    if(handle_add_admin(json_quest,reflact,db,*new_args->user_to_cfd))
+                        sendjson(*reflact,new_args->cfd);
+                    delete reflact;
+                    break;
+                }
+                case(SHOW_FRIEND):{
+                    json *reflact = new json;
+                    if(handle_show_friend(json_quest,reflact,db))
+                        sendjson(*reflact,new_args->cfd);
+                    delete reflact;
+                    break;
+                }   
+                case(ADD_GROUP_MEM):{
+                    json *reflact = new json;
+                    if(handle_add_member(json_quest,reflact,db,*new_args->user_to_cfd))
+                        sendjson(*reflact,new_args->cfd);
+                    delete reflact;
+                    break;
+                }
+                case(BREAK_GROUP):{
+                    json *reflact = new json;
+                    if(handle_break_group(json_quest,reflact,db,*new_args->user_to_cfd,*new_args->user_to_group))
+                        sendjson(*reflact,new_args->cfd);
+                    delete reflact;
+                    break;
+                }
+                case(KILL_GROUP_USER):{
+                    json *reflact = new json;
+                    if(handle_kill_user(json_quest,reflact,db,*new_args->user_to_cfd,*new_args->user_to_group))
+                        sendjson(*reflact,new_args->cfd);
+                    delete reflact;
+                    break;
+                }
+                case(DELETE_GROUP):{
+                    json *reflact = new json;
+                    if(handle_del_group(json_quest,reflact,db,*new_args->user_to_cfd))
+                        sendjson(*reflact,new_args->cfd);
+                    delete reflact;
+                    break;
+                }
             }
 
             delete new_args;        

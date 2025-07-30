@@ -32,7 +32,7 @@
 #define ADD_PRIVATE_FILE 30
 #define ADD_FILE 31
 #define SHOW_FILE 32
-#define END_RETR 33
+#define SHOW_MEMBER 33
 #define CREATE_GROUP 34
 #define SEL_GROUP 35
 #define ADD_GROUP 36
@@ -44,6 +44,13 @@
 #define GROUP_CHAT 42
 #define NOT_PEER_GROUP 43
 #define PEER_GROUP 44
+#define GROUP_END 45
+#define ADD_ADMIN 46
+#define SHOW_FRIEND 47
+#define ADD_GROUP_MEM 48
+#define BREAK_GROUP 49
+#define KILL_GROUP_USER 50
+#define DELETE_GROUP 51
 #define GROUP_LEN 32
 #define REFLACT 1000
 #define FTP_PORTNUM "2100"
@@ -57,3 +64,4 @@
 #define LARGESIZE 512
 #define CLIENT_FILE_NUM 24
 #define HANDLE_RECV_NUM 96
+
