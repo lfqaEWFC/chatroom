@@ -1,8 +1,8 @@
 #include <nlohmann/json.hpp>
 #include <iostream>
-#include "define/define.hpp"
-#include "Database/Database.hpp"
-#include "include/inetsockets_tcp.hpp"
+#include "define.hpp"
+#include "Database.hpp"
+#include "inetsockets_tcp.hpp"
 #include <ctime>
 #include <string>
 #include <iomanip>
@@ -23,7 +23,8 @@ bool handle_add_friend(json json_quest, unordered_map<int, string> *cfd_to_user,
                       unique_ptr<database> &db, json *reflact);
 bool handle_get_offline(json json_quest, unique_ptr<database> &db, json *reflact);
 bool handle_get_friend(json json_quest, unique_ptr<database> &db, json *reflact);
-bool handle_deal_friend(json json_quest, unique_ptr<database> &db, json *reflact);
+bool handle_deal_friend(json json_quest, unique_ptr<database> &db, json *reflact,
+                        unordered_map<string,int> user_to_cfd);
 bool handle_chat_name(json json_quest, unique_ptr<database> &db, json *reflact, 
                       unordered_map<string, string> *user_to_friend);
 bool handle_history_pri(json json_quest, unique_ptr<database> &db, json *reflact,
@@ -35,7 +36,8 @@ bool handle_add_black(json json_quest,json *reflact,unique_ptr<database>&db);
 bool handle_rem_black(json json_quest,json *reflact,unique_ptr<database>&db);
 bool handle_check_friend(json json_quest,json *reflact,unique_ptr<database>&db,
                          unordered_map<int, string>* cfd_to_user);
-bool handle_del_friend(json json_quest,json *reflact,unique_ptr<database>&db);
+bool handle_del_friend(json json_quest,json *reflact,unique_ptr<database>&db,
+                       unordered_map<string,int> user_to_cfd);
 bool handle_add_file(json json_quest,json *reflact,unique_ptr<database>&db,
                      unordered_map<int, string> cfd_to_user,unordered_map<string,string>user_to_friend,
                      unordered_map<string, int> user_to_cfd,unordered_map<string,int> user_to_group);
@@ -44,7 +46,7 @@ bool handle_create_group(json json_quest,json* reflact,unique_ptr<database>&db);
 bool handle_select_group(json json_quest,json* reflact,unique_ptr<database>&db);
 bool handle_add_group(json json_quest,json* reflact,unique_ptr<database>&db,unordered_map<string,int> user_to_cfd);
 bool deal_add_group(json json_quest,json* reflact,unique_ptr<database>&db);
-bool handle_commit_add(json json_quest,json* reflact,unique_ptr<database>&db);
+bool handle_commit_add(json json_quest,json* reflact,unique_ptr<database>&db,unordered_map<string,int> user_to_cfd);
 bool handle_show_group(json json_quest,json* reflact,unique_ptr<database>&db);
 bool handle_group_name(json json_quest,json* reflact,unique_ptr<database>&db,
                        unordered_map<string, int> *user_to_group);

@@ -524,24 +524,28 @@ void handle_show_file(string username, int cfd,bool endflag,
         handle_show_group(cfd,username);
         handle_pthread_wait(endflag,cond,mutex);
         strcpy(show,"请输入群聊id: ");
-        while(true){
+        while(true && *group_flag){
             input = readline(show);
             gid = atoi(input);
             if(gid == 0)
             {
                 cout << "请输入正确的群聊id" << endl;
+                *group_flag = false;
                 free(input);
-                continue;
+                break;
             } 
             free(input);
             break;
         }
-        json send_json = {
-            {"group_flag",true},
-            {"request",SHOW_FILE},
-            {"group_id",gid}
-        };
-        sendjson(send_json,cfd);
+        if(*group_flag)
+        {
+            json send_json = {
+                {"group_flag",true},
+                {"request",SHOW_FILE},
+                {"group_id",gid}
+            };
+            sendjson(send_json,cfd);
+        }
     }
     
     return;
@@ -758,7 +762,7 @@ void handle_show_group(int cfd,string username)
     return;
 }
 
-void handle_group_name(int cfd,string username)
+void handle_group_name(int cfd,string username,bool* group_flag)
 {   
     char *input;
     char name_show[LARGESIZE];
@@ -770,6 +774,12 @@ void handle_group_name(int cfd,string username)
 
     input = readline(id_show);
     group_id = atoi(input);
+    if(group_id == 0 && group_id < 0)
+    {
+        cout << "请输入正确的gid..." << endl;
+        *group_flag = false;
+        return;
+    }
 
     send_json = {
         {"request",GROUP_NAME},

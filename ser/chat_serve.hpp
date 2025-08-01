@@ -1,7 +1,7 @@
-#include "include/inetsockets_tcp.hpp"
-#include "define/define.hpp"
-#include "include/Threadpool.hpp"
-#include "Database/Database.hpp"
+#include "inetsockets_tcp.hpp"
+#include "define.hpp"
+#include "Threadpool.hpp"
+#include "Database.hpp"
 #include "serve.hpp"
 #include <sys/epoll.h>
 #include <sys/eventfd.h>
@@ -530,7 +530,7 @@ class serve{
                 }
                 case(DEAL_FRI_REQ):{
                     json *reflact = new json;
-                    if(handle_deal_friend(json_quest,db,reflact))
+                    if(handle_deal_friend(json_quest,db,reflact,*new_args->user_to_cfd))
                         sendjson(*reflact,new_args->cfd);
                     delete reflact;
                     break;
@@ -583,7 +583,7 @@ class serve{
                 }
                 case(DELETE_FRIEND):{
                     json *reflact = new json;
-                    if(handle_del_friend(json_quest,reflact,db))
+                    if(handle_del_friend(json_quest,reflact,db,*new_args->user_to_cfd))
                         sendjson(*reflact,new_args->cfd);
                     delete reflact;
                     break;
@@ -633,7 +633,7 @@ class serve{
                 }
                 case(COMMIT_ADD):{
                     json *reflact = new json;
-                    if(handle_commit_add(json_quest,reflact,db))
+                    if(handle_commit_add(json_quest,reflact,db,*new_args->user_to_cfd))
                         sendjson(*reflact,new_args->cfd);
                     delete reflact;
                     break;

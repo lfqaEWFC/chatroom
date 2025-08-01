@@ -1,5 +1,5 @@
-#include "include/inetsockets_tcp.hpp"
-#include "ser/chat_serve.hpp"
+#include "inetsockets_tcp.hpp"
+#include "chat_serve.hpp"
 
 
 int main(int argc,char **argv){

@@ -1,7 +1,7 @@
-#include "include/inetsockets_tcp.hpp"
-#include "cli/menu.hpp"
-#include "define/define.hpp"
-#include "include/Threadpool.hpp"
+#include "inetsockets_tcp.hpp"
+#include "menu.hpp"
+#include "define.hpp"
+#include "Threadpool.hpp"
 #include <sys/epoll.h>
 #include <readline/readline.h>
 #include <readline/history.h>
@@ -189,6 +189,7 @@ public:
                     {
                         system("clear");
                         cout << "感谢使用聊天室，再见!" << endl;
+                        close(cfd);
                         end_start_flag = true;
                         end_flag = true;
                         sleep(1);
@@ -365,7 +366,8 @@ public:
                                 {"request", DEAL_FRI_REQ},
                                 {"commit", commit},
                                 {"refuse", refuse},
-                                {"username", username}};
+                                {"username", username}
+                            };
                             sendjson(send_json, cfd);
                             add_friend_req_flag = false;
                             add_friend_fri_user.clear();
@@ -381,7 +383,8 @@ public:
                         system("clear");
                         handle_show_file(username, cfd,end_flag,&recv_cond,  
                                          &recv_lock,&pri_chat_flag,&group_flag);
-                        handle_pthread_wait(end_flag, &recv_cond, &recv_lock);
+                        if(group_flag || pri_chat_flag)
+                            handle_pthread_wait(end_flag, &recv_cond, &recv_lock);
                         if(get_file_flag){
                             cout << "=============================================" << endl;
                             handle_retr_file(FTP_ctrl_cfd,end_flag,&recv_lock,&fri_username,
@@ -435,8 +438,12 @@ public:
                         system("clear");
                         handle_show_group(cfd,username);
                         handle_pthread_wait(end_flag, &recv_cond, &recv_lock);
-                        handle_group_name(cfd,username);
-                        handle_pthread_wait(end_flag, &recv_cond, &recv_lock);
+                        if(group_flag && !end_flag)
+                        {
+                            handle_group_name(cfd,username,&group_flag);
+                            if(group_flag)
+                                handle_pthread_wait(end_flag, &recv_cond, &recv_lock);
+                        }
                         if(group_flag && !end_flag)
                         {
                             handle_history_group(cfd,username,group_id);
@@ -1197,10 +1204,12 @@ private:
                                         cout << "   群主: " << owner_name;
                                         cout << "   角色: " << role << endl;;
                                     }
+                                    *new_args->group_flag = true;
                                 }
                                 else
                                 {
                                     string reflact = recvjson["reflact"];
+                                    *new_args->group_flag = false;
                                     cout << reflact << endl;
                                 }
                                 cout << "=============================================" << endl;
@@ -1216,6 +1225,7 @@ private:
                                 else
                                 {
                                     string reflact = recvjson["reflact"];
+                                    *new_args->group_flag = false;
                                     cout << reflact << endl;
                                 }
                             }
@@ -1655,7 +1665,6 @@ private:
                             {
                                 string message = recvjson["message"];
                                 bool outflag = recvjson["outflag"];
-                                cout << "outflag: " << outflag << endl;
 
                                 cout << "\r\033[K" << flush;
                                 cout << message << endl;
@@ -1678,7 +1687,6 @@ private:
                             {
                                 string message = recvjson["message"];
                                 bool outflag = recvjson["outflag"];
-                                cout << "outflag: " << outflag << endl;
                                 
                                 cout << "\r\033[K" << flush;
                                 cout << message << endl;

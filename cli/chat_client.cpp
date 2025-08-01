@@ -1,5 +1,5 @@
 #include "chat_client.hpp"
-#include "define/define.hpp"
+#include "define.hpp"
 
 using namespace std;
 

@@ -497,45 +497,19 @@ bool handle_add_friend(json json_quest,unordered_map<int, string>* cfd_to_user,u
     return true;
 }
 
-bool handle_get_offline(json json_quest,unique_ptr<database> &db,json *reflact){
-
+bool handle_get_offline(json json_quest, unique_ptr<database> &db, json *reflact) 
+{
+    redisReply *reply;
     json arr = json::array();
     const string user = json_quest["username"];
     const string fri_key = "offline:friend_req:" + user;
     const string pri_key = "offline:private:" + user;
     const string gad_key = "offline:group_add:" + user;
     const string time_key = "offline:logout_time";
+    const string sys_key = "offline:system_notice:" + user;
 
-    redisReply *reply = db->execRedis("LRANGE "+fri_key+" 0 -1");
-    if (!reply) {
-        *reflact = {
-            {"sort", ERROR},
-            {"reflact", "服务端获取 Redis 回复失败"}
-        };
-        freeReplyObject(reply);
-        return true;
-    }
-
-    if (reply->type == REDIS_REPLY_ERROR) {
-        string err = reply->str;
-        *reflact = {
-            {"sort", ERROR},
-            {"reflact", "Redis 错误: " + err}
-        };
-        freeReplyObject(reply);
-        return true;
-    }
-
-    if (reply->type == REDIS_REPLY_ARRAY) {
-        for (size_t i = 0; i < reply->elements; ++i) {
-            json req = json::parse(reply->element[i]->str);
-            arr.push_back(req["message"]);
-        }
-    }
-
-    freeReplyObject(reply);
-    reply = db->execRedis("HGETALL "+pri_key+"");
-    if (reply->type == REDIS_REPLY_ERROR) {
+    reply = db->execRedis("HGETALL " + pri_key);
+    if (reply && reply->type == REDIS_REPLY_ERROR) {
         string err = reply->str;
         *reflact = {
             {"sort", ERROR},
@@ -545,37 +519,17 @@ bool handle_get_offline(json json_quest,unique_ptr<database> &db,json *reflact){
         return true;
     }
     if (reply && reply->type == REDIS_REPLY_ARRAY) {
-        for (size_t i = 0; i < reply->elements; i += 2) {
+        for (size_t i = 0; i + 1 < reply->elements; i += 2) {
             string sender = reply->element[i]->str;
             string count = reply->element[i + 1]->str;
             string line = "好友 [" + sender + "] 有 " + count + " 条未读私聊消息";
             arr.push_back(line);
         }
     }
+    if (reply) freeReplyObject(reply);
 
-    freeReplyObject(reply);
-    reply = db->execRedis("HGETALL "+gad_key+"");
-    if (reply->type == REDIS_REPLY_ERROR) {
-        string err = reply->str;
-        *reflact = {
-            {"sort", ERROR},
-            {"reflact", "Redis 错误: " + err}
-        };
-        freeReplyObject(reply);
-        return true;
-    }
-    if (reply && reply->type == REDIS_REPLY_ARRAY) {
-        for (size_t i = 0; i+1 < reply->elements; i += 2) {
-            string group_id = reply->element[i]->str;
-            string count = reply->element[i + 1]->str;
-            string line = "gid 为 " + group_id + " 的群组有 " + count + " 条加群申请";
-            arr.push_back(line);
-        }
-    }
-
-    freeReplyObject(reply);
-    reply = db->execRedis("HGET "+time_key+" "+user+"");
-    if (reply->type == REDIS_REPLY_ERROR) {
+    reply = db->execRedis("HGET " + time_key + " " + user);
+    if (reply && reply->type == REDIS_REPLY_ERROR) {
         string err = reply->str;
         *reflact = {
             {"sort", ERROR},
@@ -590,7 +544,7 @@ bool handle_get_offline(json json_quest,unique_ptr<database> &db,json *reflact){
     } else {
         logout_time = "1970-01-01 00:00:00";
     }
-    if(reply) freeReplyObject(reply);
+    if (reply) freeReplyObject(reply);
 
     MYSQL_RES* res = db->query_sql(
         "SELECT group_id FROM group_members WHERE "
@@ -601,8 +555,7 @@ bool handle_get_offline(json json_quest,unique_ptr<database> &db,json *reflact){
         return true;
     }
     MYSQL_ROW row;
-    while((row = mysql_fetch_row(res)) != nullptr)
-    {
+    while ((row = mysql_fetch_row(res)) != nullptr) {
         int gid_offline_cnt = 0;
         long gid = atoi(row[0]);
         string redis_group_key = "group_message:" + to_string(gid);
@@ -616,7 +569,7 @@ bool handle_get_offline(json json_quest,unique_ptr<database> &db,json *reflact){
                         gid_offline_cnt++;
                     }
                 } catch (...) {
-                    cerr << "JSON parse error in group:message:" << gid << endl;
+                    cerr << "JSON parse error in group_message:" << gid << endl;
                 }
             }
         }
@@ -626,35 +579,100 @@ bool handle_get_offline(json json_quest,unique_ptr<database> &db,json *reflact){
             "WHERE group_id=" + to_string(gid) + " "
             "AND created_at > '" + logout_time + "' "
         );
-        if(res1 == nullptr)
-        {
+        if (res1 == nullptr) {
             *reflact = {{"sort", "ERROR"}, {"reflact", "MySQL 查询用户所在群消息失败"}};
             return true;
         }
         MYSQL_ROW row1 = mysql_fetch_row(res1);
         gid_offline_cnt += atoi(row1[0]);
-        if(gid_offline_cnt > 0){
+        if (gid_offline_cnt > 0) {
             string line = "gid 为 " + to_string(gid) + " 的群组有 " + to_string(gid_offline_cnt) + " 条新消息";
             arr.push_back(line);
         }
     }
     db->free_result(res);
 
-    redisReply* del_reply = db->execRedis("DEL "+fri_key+"");
-    redisReply* del_pri = db->execRedis("DEL "+pri_key+"");
-    redisReply* del_gad = db->execRedis("DEL "+gad_key+"");
-    if((del_reply == nullptr) || (del_pri == nullptr) || (del_gad == nullptr)){
-        cerr << "Main Redis DB DEL "+fri_key+" Error" << endl;
-        *reflact = {{"sort", "ERROR"}, {"reflact", "redis DEL error"}};
-        freeReplyObject(del_reply);
-        freeReplyObject(del_pri);
-        freeReplyObject(del_gad);
+    reply = db->execRedis("HGETALL " + gad_key);
+    if (reply && reply->type == REDIS_REPLY_ERROR) {
+        string err = reply->str;
+        *reflact = {
+            {"sort", ERROR},
+            {"reflact", "Redis 错误: " + err}
+        };
+        freeReplyObject(reply);
+        return true;
+    }
+    if (reply && reply->type == REDIS_REPLY_ARRAY) {
+        for (size_t i = 0; i + 1 < reply->elements; i += 2) {
+            string group_id = reply->element[i]->str;
+            string count = reply->element[i + 1]->str;
+            string line = "gid 为 " + group_id + " 的群组有 " + count + " 条加群申请";
+            arr.push_back(line);
+        }
+    }
+    if (reply) freeReplyObject(reply);
+
+    reply = db->execRedis("LRANGE " + fri_key + " 0 -1");
+    if (!reply) {
+        *reflact = {
+            {"sort", ERROR},
+            {"reflact", "服务端获取 Redis 回复失败"}
+        };
         return true;
     }
 
+    if (reply->type == REDIS_REPLY_ERROR) {
+        string err = reply->str;
+        *reflact = {
+            {"sort", ERROR},
+            {"reflact", "Redis 错误: " + err}
+        };
+        if (reply) freeReplyObject(reply);
+        return true;
+    }
+
+    if (reply->type == REDIS_REPLY_ARRAY) {
+        for (size_t i = 0; i < reply->elements; ++i) {
+            json req = json::parse(reply->element[i]->str);
+            arr.push_back(req["message"]);
+        }
+    }
+    if (reply) freeReplyObject(reply);
+
+    reply = db->execRedis("LRANGE " + sys_key + " 0 -1");
+    if (reply && reply->type == REDIS_REPLY_ARRAY && reply->elements > 0) {
+        string merged_msg = "系统通知：";
+        for (size_t i = 0; i < reply->elements; ++i) {
+            try {
+                json msg_json = json::parse(reply->element[i]->str);
+                string timestamp = msg_json["timestamp"];
+                string message = msg_json["message"];
+                merged_msg += "\n[" + timestamp + "] " + message;
+            } catch (...) {
+                cerr << "JSON parse error in system_notice" << endl;
+            }
+        }
+        arr.push_back(merged_msg);
+    }
+    if (reply) freeReplyObject(reply);
+
+    redisReply* del_sys = db->execRedis("DEL " + sys_key);
+    redisReply* del_reply = db->execRedis("DEL " + fri_key);
+    redisReply* del_pri = db->execRedis("DEL " + pri_key);
+    redisReply* del_gad = db->execRedis("DEL " + gad_key);
+    if ((del_reply == nullptr) || (del_pri == nullptr) || (del_gad == nullptr) || (del_sys == nullptr)) {
+        cerr << "Main Redis DB DEL error" << endl;
+        *reflact = {{"sort", "ERROR"}, {"reflact", "redis DEL error"}};
+        if (del_reply) freeReplyObject(del_reply);
+        if (del_pri) freeReplyObject(del_pri);
+        if (del_gad) freeReplyObject(del_gad);    
+        if (del_sys) freeReplyObject(del_sys);
+        return true;
+    }
     freeReplyObject(del_reply);
-    freeReplyObject(del_gad);
     freeReplyObject(del_pri);
+    freeReplyObject(del_gad);
+    freeReplyObject(del_sys);
 
     *reflact = {
         {"sort", MESSAGE},
@@ -713,7 +731,8 @@ bool handle_get_friend(json json_quest,unique_ptr<database> &db,json *reflact){
     return true;
 }
 
-bool handle_deal_friend(json json_quest,unique_ptr<database> &db,json *reflact){
+bool handle_deal_friend(json json_quest,unique_ptr<database> &db,json *reflact,
+                        unordered_map<string, int> user_to_cfd){
 
     vector<string> recv_commit = json_quest["commit"];
     vector<string> recv_refuse = json_quest["refuse"];
@@ -725,12 +744,34 @@ bool handle_deal_friend(json json_quest,unique_ptr<database> &db,json *reflact){
 
     for(int i=0;i<c_size;i++){
         string user = db->escape_mysql_string_full(recv_commit[i]);
-        c_chk = db->execute_sql("UPDATE friendship SET status = 1 WHERE username = '"+user+"' AND friend_username = '"+fri_user+"'");
+        c_chk = db->execute_sql("UPDATE friendship SET status = 1 WHERE "
+                                "username = '"+user+"' AND friend_username = '"+fri_user+"'");
         if(c_chk == false) 
             break;
-        c_chk = db->execute_sql("INSERT INTO friendship(username, friend_username, status) VALUES ('" +fri_user+ "','" +user+ "',1)");
+        c_chk = db->execute_sql("INSERT INTO friendship(username, friend_username, status) "
+                                "VALUES ('" +fri_user+ "','" +user+ "',1)");
         if(c_chk == false) 
             break;
+        auto it = user_to_cfd.find(recv_commit[i]);
+        if(it != user_to_cfd.end())
+        {
+            int cfd = it->second;
+            json send_json = {
+                {"sort",MESSAGE},
+                {"request",NON_PEER_CHAT},
+                {"message","通知："+fri_user+" 同意了你的好友请求..."}
+            };
+            sendjson(send_json,cfd);
+        }
+        else
+        {
+            string redis_key = "offline:system_notice:" + recv_commit[i];
+            json msg = {
+                {"timestamp",get_current_mysql_timestamp()},
+                {"message",""+fri_user+" 同意了你的好友请求..."}
+            };
+            db->lpushJson(redis_key,msg);
+        }
     }
 
     for(int i=0;i<r_size;i++){
@@ -738,6 +779,26 @@ bool handle_deal_friend(json json_quest,unique_ptr<database> &db,json *reflact){
         r_chk = db->execute_sql("DELETE FROM friendship WHERE username = '"+user+"' AND friend_username = '"+fri_user+"'");
         if(r_chk == false)
             break;
+        auto it = user_to_cfd.find(user);
+        if(it != user_to_cfd.end())
+        {
+            int cfd = it->second;
+            json send_json = {
+                {"sort",MESSAGE},
+                {"request",NON_PEER_CHAT},
+                {"message","通知："+fri_user+" 拒绝了你的好友请求..."}
+            };
+            sendjson(send_json,cfd);
+        }
+        else
+        {
+            string redis_key = "offline:system_notice:" + recv_refuse[i];
+            json msg = {
+                {"timestamp",get_current_mysql_timestamp()},
+                {"message",""+fri_user+" 拒绝了你的好友请求..."}
+            };
+            db->lpushJson(redis_key,msg);
+        }
     }
 
     if(r_chk == false || c_chk == false){
@@ -1288,7 +1349,7 @@ bool handle_check_friend(json json_quest,json *reflact,unique_ptr<database>&db,u
     return true;
 }
 
-bool handle_del_friend(json json_quest,json *reflact,unique_ptr<database>&db) 
+bool handle_del_friend(json json_quest,json *reflact,unique_ptr<database>&db,unordered_map<string,int> user_to_cfd) 
 {
     string username = db->escape_mysql_string_full(json_quest["username"]);
     string del_user = db->escape_mysql_string_full(json_quest["del_user"]);
@@ -1337,6 +1398,28 @@ bool handle_del_friend(json json_quest,json *reflact,unique_ptr<database>&db)
             {"request", DELETE_FRIEND},
             {"reflact", "没有找到要删除的好友关系"}
         };
+    }
+
+    string nor_del_user = json_quest["del_user"];
+    auto it = user_to_cfd.find(nor_del_user);
+    if(it != user_to_cfd.end())
+    {
+        int cfd = it->second;
+        json send_json = {
+            {"sort",MESSAGE},
+            {"request",NON_PEER_CHAT},
+            {"message","通知：你已被 "+username+" 删除..."}
+        };
+        sendjson(send_json,cfd);
+    }
+    else
+    {
+        string redis_key = "offline:system_notice:" + nor_del_user;
+        json msg = {
+            {"timestamp",get_current_mysql_timestamp()},
+            {"message","你已被 "+username+" 删除..."}
+        };
+        db->lpushJson(redis_key,msg);
     }
 
     return true;
@@ -2144,7 +2227,7 @@ bool deal_add_group(json json_quest,json* reflact,unique_ptr<database>&db)
     return true;
 }
 
-bool handle_commit_add(json json_quest,json* reflact,unique_ptr<database>&db)
+bool handle_commit_add(json json_quest,json* reflact,unique_ptr<database>&db,unordered_map<string,int> user_to_cfd)
 {
     MYSQL* sql = db->get_mysql_conn();
     json elements = json_quest["elements"];
@@ -2168,7 +2251,31 @@ bool handle_commit_add(json json_quest,json* reflact,unique_ptr<database>&db)
             return true;
         }
         uint64_t affacted_rows = mysql_affected_rows(sql);
-        if(affacted_rows > 0) success_cnt++;
+        if(affacted_rows > 0) 
+        {
+            success_cnt++;
+            string nor_user = msg["username"];
+            auto it = user_to_cfd.find(nor_user);
+            if(it != user_to_cfd.end())
+            {
+                int cfd = it->second;
+                json send_json = {
+                    {"sort",MESSAGE},
+                    {"request",NON_PEER_CHAT},
+                    {"message","通知：成功加入 gid 为 "+to_string(gid)+" 的群聊"}
+                };
+                sendjson(send_json,cfd);
+            }
+            else
+            {
+                string redis_key = "offline:system_notice:" + nor_user;
+                json msg = {
+                    {"timestamp",get_current_mysql_timestamp()},
+                    {"message","成功加入 gid 为 "+to_string(gid)+" 的群聊"}
+                };
+                db->lpushJson(redis_key,msg);
+            }
+        }
         else fail_cnt++;
     }
 

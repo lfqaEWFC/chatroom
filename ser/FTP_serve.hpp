@@ -1,7 +1,7 @@
 #ifndef FTP_HPP
-#include"include/inetsockets_tcp.hpp"
-#include"include/Threadpool.hpp"
-#include"define/define.hpp"
+#include"inetsockets_tcp.hpp"
+#include"Threadpool.hpp"
+#include"define.hpp"
 #include<fcntl.h>
 #include<sys/epoll.h>
 #include<iostream>
@@ -9,7 +9,7 @@
 #include<dirent.h>
 #include<sys/stat.h>
 #include<sys/sendfile.h>
-#include <nlohmann/json.hpp>
+#include<nlohmann/json.hpp>
 
 using json = nlohmann::json;
 
