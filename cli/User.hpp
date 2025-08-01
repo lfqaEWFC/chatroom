@@ -48,3 +48,4 @@ void handle_group_chat(int cfd,string username,string group_role,long group_id,
                        int FTP_ctrl_cfd,bool* FTP_stor_flag,bool* group_flag);
 void show_group_members(int cfd,string username,long gid);
 void show_user_friend(int cfd,string username);
+bool is_all_space(const char* str);

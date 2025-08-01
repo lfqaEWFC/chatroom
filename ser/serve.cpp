@@ -1,5 +1,32 @@
 #include "serve.hpp"
 
+void select_new_owner_or_disband_group(const string& old_owner, unique_ptr<database>& db)
+{
+    MYSQL_RES* res = db->query_sql("SELECT group_id FROM `groups` WHERE owner_name ='"+old_owner+"'");
+    if (!res) return;
+
+    MYSQL_ROW row;
+    while ((row = mysql_fetch_row(res)) != nullptr) 
+    {
+        string gid = row[0];
+        MYSQL_RES* res2 = db->query_sql(
+            "SELECT username FROM group_members WHERE group_id="+gid+" AND username !='"+old_owner+"' LIMIT 1");
+        if (!res2) continue;
+        MYSQL_ROW row2 = mysql_fetch_row(res2);
+        if (row2) {
+            string new_owner = row2[0];
+            db->execute_sql("UPDATE `groups` SET owner_name ='"+new_owner+"' WHERE group_id="+gid);
+        } else {
+            db->execute_sql("DELETE FROM `groups` WHERE group_id = " + gid);
+            db->execRedis("DEL group_message:" + gid);
+        }
+        db->free_result(res2);
+    }
+
+    db->free_result(res);
+    return;
+}
+
 string get_current_mysql_timestamp() {
     time_t now = time(nullptr);
     tm tm_struct;
@@ -281,45 +308,111 @@ bool handle_logout(json json_quest, unique_ptr<database> &db, json *reflact,
     return false;
 }
 
-bool handle_break(json json_quest,unique_ptr<database> &db,json *reflact){
-
+bool handle_break(json json_quest, unique_ptr<database> &db, json *reflact)
+{
+    string sql;
+    MYSQL_RES *res;
+    string username = json_quest["username"];
+    const string fri_key = "offline:friend_req:" + username;
+    const string pri_key = "offline:private:" + username;
+    const string gad_key = "offline:group_add:" + username;
+    const string time_key = "offline:logout_time";
+    const string sys_key = "offline:system_notice:" + username;
+    string recv_password = json_quest["password"];
     string break_username = db->escape_mysql_string_full(json_quest["username"]);
     string break_password = db->escape_mysql_string_full(json_quest["password"]);
 
-    string sql = "DELETE FROM user WHERE username = '" + break_username + "' AND password = '" + break_password + "'";
-    bool res1 = db->execute_sql(sql);
-    sql = "DELETE FROM friendship WHERE username = '"+break_username+"' OR friend_username = '"+break_username+"'";
-    bool res2 = db->execute_sql(sql);
-    sql = "DELETE FROM private_message WHERE sender = '"+break_username+"' OR receiver = '"+break_username+"'";
-    bool res3 = db->execute_sql(sql);
-    if(!res1 || !res2 || !res3){
+    sql = "SELECT password FROM user WHERE username = '"+break_username+"'";
+    res = db->query_sql(sql);
+    if(res == nullptr)
+    {
         *reflact = {
-            {"sort",ERROR},
-            {"reflact","服务端删除异常..."}
+            {"sort", ERROR},
+            {"reflact", "MYSQL SELECT ERROR"}
         };
         return false;
     }
-    else{
-        my_ulonglong affected = mysql_affected_rows(db->get_mysql_conn());
 
-        if (affected == 0) {
-            *reflact = {
-                {"sort", REFLACT},
-                {"request",BREAK},
-                {"reflact", "注销失败，用户名或密码错误..."}
-            };
-        } 
-        else {
-            *reflact = {
-                {"sort", REFLACT},
-                {"request",BREAK},
-                {"reflact", "注销成功，账户已被删除"}
-            };
-        }
+    uint64_t rows = mysql_num_rows(res);
+    db->free_result(res);
+    if(rows == 0)
+    {
+        *reflact = {
+            {"sort", REFLACT},
+            {"request", BREAK},
+            {"reflact", "用户不存在或密码输入错误，请重试..."}
+        };
+        return true;
     }
+    MYSQL_ROW row = mysql_fetch_row(res);
+    string password = row[0];
+    if(password != recv_password)
+    {
+        *reflact = {
+            {"sort", REFLACT},
+            {"request", BREAK},
+            {"reflact", "用户不存在或密码输入错误，请重试..."}
+        };
+        return true;
+    }
+
+    sql = "DELETE FROM user WHERE username = '" + break_username + "' AND password = '" + break_password + "'";
+    bool res1 = db->execute_sql(sql);
+
+    sql = "DELETE FROM friendship WHERE username = '"+break_username+"' OR friend_username = '"+break_username+"'";
+    bool res2 = db->execute_sql(sql);
+
+    sql = "DELETE FROM private_message WHERE sender = '"+break_username+"' OR receiver = '"+break_username+"'";
+    bool res3 = db->execute_sql(sql);
+
+    if(!res1 || !res2 || !res3){
+        *reflact = {
+            {"sort", ERROR},
+            {"reflact", "服务端删除数据库数据异常..."}
+        };
+        return false;
+    }
+
+    redisReply* reply1 = db->execRedis("DEL " + fri_key);
+    redisReply* reply2 = db->execRedis("DEL " + pri_key);
+    redisReply* reply3 = db->execRedis("DEL " + gad_key);
+    redisReply* reply4 = db->execRedis("DEL " + sys_key);
+    redisReply* reply5 = db->execRedis("HDEL " + time_key + " " + username);
+
+    if ((reply1 == nullptr) || (reply2 == nullptr) || (reply3 == nullptr) 
+        || (reply4 == nullptr) || (reply5 == nullptr))
+    {
+        *reflact = {
+            {"sort", ERROR},
+            {"reflact", "注销成功，但清理 Redis 缓存时发生部分错误"}
+        };
+
+        if(reply1) db->free_reply(reply1);
+        if(reply2) db->free_reply(reply2);
+        if(reply3) db->free_reply(reply3);
+        if(reply4) db->free_reply(reply4);
+        if(reply5) db->free_reply(reply5);
+
+        return true;
+    }
+
+    select_new_owner_or_disband_group(break_username, db);
+
+    *reflact = {
+        {"sort", REFLACT},
+        {"request", BREAK},
+        {"reflact", "注销成功，账户及相关数据和缓存已删除"}
+    };
+
+    if(reply1) db->free_reply(reply1);
+    if(reply2) db->free_reply(reply2);
+    if(reply3) db->free_reply(reply3);
+    if(reply4) db->free_reply(reply4);
+    if(reply5) db->free_reply(reply5);
 
     return true;
 }
+
 
 bool handle_add_friend(json json_quest,unordered_map<int, string>* cfd_to_user,unique_ptr<database> &db,json *reflact){
 
@@ -3022,6 +3115,7 @@ bool handle_break_group(json json_quest, json* reflact, unique_ptr<database>& db
     MYSQL_RES* res;
     MYSQL_ROW row;
     long gid = json_quest["gid"];
+    string redis_key = "group_message:"+to_string(gid);
     string safe_gid = to_string(gid);
     string username = json_quest["username"];
 
@@ -3095,11 +3189,21 @@ bool handle_break_group(json json_quest, json* reflact, unique_ptr<database>& db
         };
         return true;
     }
+    execchk = db->execRedis("DEL " + redis_key);
+    if(execchk == false)
+    {
+        *reflact = {
+            {"sort",ERROR},
+            {"reflact","redis 缓存清除出错..."}
+        };
+        return true;
+    }
     *reflact = { 
         {"sort", REFLACT},
         {"request",BREAK_GROUP}, 
         {"reflact", "群聊解散成功"} 
     };
+    
     return true;
 }
 
@@ -3247,4 +3351,3 @@ bool handle_del_group(json json_quest, json* reflact, unique_ptr<database>& db,
     };
     return true;
 }
-

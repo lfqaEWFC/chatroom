@@ -1,8 +1,17 @@
 #include "User.hpp"
 
+bool is_all_space(const char* str)
+{
+    if (str == NULL) return true;
+    while (*str) {
+        if (!isspace(*str)) return false;
+        str++;
+    }
+    return true;
+}
+
 int handle_signin(json* signin)
 {
-    bool checkflag = true;
     char *input;
     char username[64];
     char password[64];
@@ -11,49 +20,81 @@ int handle_signin(json* signin)
     char answer[1024];
     char show[LARGESIZE];
     
-    strcpy(show,"账户名称：");
-    input = readline(show);
-    strcpy(username,input);
     while(true)
     {
-        strcpy(show,"账户密码：");
-        free(input);
+        system("clear");
+        strcpy(show,"账户名称：");
         input = readline(show);
-        strcpy(password,input);
-        if(strlen(password) < 8){
-            cout << "密码长度过短，请重新输入" << endl;
-            memset(password,0,64);
+        if(is_all_space(input))
+        {
+            cout << "请勿输入全部为空的字符串..." << endl;
+            wait_user_continue();
             continue;
         }
-        system("clear");
+        strcpy(username,input);
+        while(true)
+        {
+            system("clear");
+            strcpy(show,"账户密码：");
+            free(input);
+            input = readline(show);
+            strcpy(password,input);
+            if(strlen(password) < 8){
+                cout << "密码长度过短，请重新输入" << endl;
+                wait_user_continue();
+                continue;
+            }
+            if(is_all_space(password))
+            {
+                cout << "请勿输入全部为空的字符串..." << endl;
+                wait_user_continue();
+                continue;
+            }
+
+            system("clear");  
+            strcpy(show,"请确认密码：");
+            free(input);
+            input = readline(show);
+            strcpy(checkpw,input);
+            if(strcmp(checkpw,password) == 0){
+                cout << "密码设置成功" << endl;
+                wait_user_continue();
+                break;
+            }
+            else{
+                cout << "确认密码与帐号密码不相同，请重新设置密码..." << endl;
+                wait_user_continue();
+                continue;
+            }
+        }
         break;
     }
-    while(checkflag)
+    while(true)
     {
-        strcpy(show,"请确认密码：");
+        system("clear");
+        strcpy(show,"密保问题：");
+        free(input);
+        if(is_all_space(input))
+        {
+            cout << "请勿输入全部为空的字符串..." << endl;
+            wait_user_continue();
+            continue;
+        }
+        input = readline(show);
+        strcpy(question,input);
+        strcpy(show,"答案：");
         free(input);
         input = readline(show);
-        strcpy(checkpw,input);
-        if(strcmp(checkpw,password) == 0){
-            cout << "密码设置成功" << endl;
-            checkflag = false;
+        if(is_all_space(input))
+        {
+            cout << "请勿输入全部为空的字符串..." << endl;
+            wait_user_continue();
             continue;
         }
-        else{
-            cout << "确认密码与帐号密码不相同，请重新确认" << endl;
-            continue;
-        }
+        strcpy(answer,input); 
+        break;
     }
-
-    strcpy(show,"密保问题：");
-    free(input);
-    input = readline(show);
-    strcpy(question,input);
-    strcpy(show,"答案：");
-    free(input);
-    input = readline(show);
-    strcpy(answer,input);
-    
+        
     *signin = {
         {"request",SIGNIN},
         {"username",username},
@@ -631,12 +672,21 @@ void handle_create_group(string username,int cfd)
 
     while(true)
     {    
+        system("clear");
         strcpy(group_show,"请输入创建的群聊名称： ");
         input = readline(group_show);
         if(strlen(input) > GROUP_LEN)
         {
             cout << "群聊名称过长，请重新输入...." << endl;
             free(input);
+            wait_user_continue();
+            continue;
+        }
+        if(is_all_space(input))
+        {
+            cout << "请勿输入全部为空的字符串..." << endl;
+            free(input);
+            wait_user_continue();
             continue;
         }
         break;

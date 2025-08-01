@@ -64,3 +64,4 @@ bool handle_break_group(json json_quest,json *reflact,unique_ptr<database>&db,
 bool handle_kill_user(json json_quest,json *reflact,unique_ptr<database>&db,
                       unordered_map<string,int> user_to_cfd,unordered_map<string,int> user_to_group);
 bool handle_del_group(json json_quest,json *reflact,unique_ptr<database>&db,unordered_map<string,int> user_to_cfd);
+void select_new_owner_or_disband_group(const string& old_owner, unique_ptr<database>& db);
