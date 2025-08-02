@@ -266,6 +266,8 @@ public:
                     case 2:
                     {
                         system("clear");
+                        show_user_friend(cfd,username);
+                        handle_pthread_wait(end_flag, &recv_cond, &recv_lock);
                         json *chat_name = new json;
                         handle_chat_name(chat_name, username);
                         string fri_user = (*chat_name)["fri_user"];
