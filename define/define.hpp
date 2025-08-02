@@ -51,6 +51,8 @@
 #define BREAK_GROUP 49
 #define KILL_GROUP_USER 50
 #define DELETE_GROUP 51
+#define PING 52
+#define PONG 53
 #define GROUP_LEN 32
 #define REFLACT 1000
 #define FTP_PORTNUM "2100"
@@ -64,4 +66,3 @@
 #define LARGESIZE 512
 #define CLIENT_FILE_NUM 24
 #define HANDLE_RECV_NUM 96
-

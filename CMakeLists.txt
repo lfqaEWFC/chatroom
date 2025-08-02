@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 3.10)
 project(chatroom)
 
 set(MYSQL_INCLUDE_DIR /usr/include/mysql)
+#set(MYSQL_LIBRARIES /usr/lib/libmysqlclient.so)-arch-linux
 set(MYSQL_LIBRARIES /usr/lib/x86_64-linux-gnu/libmysqlclient.so)
 
 include_directories(

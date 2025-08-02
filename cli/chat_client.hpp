@@ -1297,6 +1297,13 @@ private:
                                 string reflact = recvjson["reflact"];
                                 cout << reflact << endl;
                             }
+                            else if(recvjson["request"] == PING){
+                                json send_json = {
+                                    {"sort",REFLACT},
+                                    {"request",PONG}
+                                };
+                                sendjson(send_json,new_args->cfd);
+                            }
                             else{
                                 cout << "错误的request,服务端可能出错..." <<endl;
                                 continue;

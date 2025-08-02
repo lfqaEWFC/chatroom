@@ -24,7 +24,8 @@ typedef struct reactargs{
     unordered_map<string ,int>* user_to_cfd;
     unordered_map<int, string>* cfd_to_buffer;
     unordered_map<string, int>* user_to_group;
-    unordered_map<string, string>* user_to_friend;      
+    unordered_map<string, string>* user_to_friend;
+    unordered_map<int, time_t>* cfd_to_timestamp;      
 } reactargs;
 
 typedef struct handle_recv_args{
@@ -34,6 +35,7 @@ typedef struct handle_recv_args{
     unordered_map<string, int>* user_to_cfd;
     unordered_map<string, string>* user_to_friend;
     unordered_map<string, int>* user_to_group;
+    unordered_map<int, time_t>* cfd_to_timestamp;  
 }handle_recv_args;
 
 class serve{
@@ -72,6 +74,7 @@ class serve{
 
             database db("localhost", 0, "root", nullptr, "chat_database", "localhost", 6379);
             
+            pthread_create(&heart_beat,nullptr,heart_beat_func,this);
             return;
 
         }
@@ -106,6 +109,7 @@ class serve{
                         }
 
                         set_nonblocking(cfd);
+                        cfd_to_timestamp[cfd] = time(nullptr);
 
                         if(creatflag)
                         {
@@ -137,6 +141,31 @@ class serve{
 
     private:
 
+        static void* heart_beat_func(void* args)
+        {
+            serve* srv = static_cast<serve*>(args);
+            while(srv->startflag)
+            {
+                auto it = srv->cfd_to_timestamp.begin();
+                for(;it != srv->cfd_to_timestamp.end();it++)
+                {
+                    int cfd = it->first;
+                    time_t now = time(nullptr);
+                    time_t timestamp = it->second;
+                    int time = now - timestamp;
+                    if(time > 30)  
+                        close(cfd);
+                    json send_json = {
+                        {"sort",REFLACT},
+                        {"request",PING}
+                    };
+                    sendjson(send_json,cfd);
+                }
+                sleep(10);
+            }
+            return nullptr;
+        }
+
         void init_reactors() 
         {
             struct epoll_event ev;
@@ -151,6 +180,7 @@ class serve{
                 reactarr[i].cfd_to_buffer = &cfd_to_buffer;
                 reactarr[i].user_to_friend = &user_to_friend;
                 reactarr[i].user_to_group = &user_to_group;
+                reactarr[i].cfd_to_timestamp = &cfd_to_timestamp;
                 if(reactarr[i].cefd == -1) 
                 {
                     perror("epoll_create");
@@ -298,6 +328,12 @@ class serve{
                                 if(reply) freeReplyObject(reply);
                                 cout << "logout_time change" << endl;
                             }
+                            auto it_time = pthargs->cfd_to_timestamp->find(evlist[i].data.fd);
+                            if(it_time != pthargs->cfd_to_timestamp->end())
+                            {
+                                pthargs->cfd_to_timestamp->erase(it_time);
+                                cout << "delete cfd_to_timestamp" << endl;
+                            }
                             pthargs->cnt--;
                         }
                         continue;
@@ -324,6 +360,7 @@ class serve{
                                 {
                                     close(cfd);
                                     perror("recv");
+                                    epoll_ctl(pthargs->cefd, EPOLL_CTL_DEL, cfd, nullptr);
                                     static thread_local unique_ptr<database> db = nullptr;
                                     {
                                         lock_guard<mutex> lock(pthargs->queue_mutex);
@@ -368,6 +405,9 @@ class serve{
                                                 pthargs->user_to_group->erase(it_id);
                                             pthargs->cfd_to_user->erase(it);
                                         }
+                                        auto it_time = pthargs->cfd_to_timestamp->find(cfd);
+                                        if(it_time != pthargs->cfd_to_timestamp->end())
+                                            pthargs->cfd_to_timestamp->erase(it_time);
                                     }
                                     break;
                                 }              
@@ -396,6 +436,7 @@ class serve{
                             args->user_to_cfd = pthargs->user_to_cfd;
                             args->user_to_friend = pthargs->user_to_friend;
                             args->user_to_group = pthargs->user_to_group;
+                            args->cfd_to_timestamp = pthargs->cfd_to_timestamp;
                             args->json_str = json_str;
                     
                             buffer.erase(0, 4 + json_len);
@@ -722,6 +763,11 @@ class serve{
                     delete reflact;
                     break;
                 }
+                case(PONG):{
+                    time_t now = time(nullptr);
+                    (*new_args->cfd_to_timestamp)[new_args->cfd] = now;
+                    cout << "client - "+to_string(new_args->cfd)+" : pong" << endl;
+                }
             }
 
             delete new_args;        
@@ -736,6 +782,7 @@ class serve{
         pool *handle_recv;
         reactargs *reactarr;
         uint64_t event_value;
+        pthread_t heart_beat;
         struct epoll_event lev;
         struct epoll_event levlist[EPSIZE];
         unordered_map<int, string> cfd_to_user;
@@ -743,5 +790,5 @@ class serve{
         unordered_map<int, string> cfd_to_buffer;
         unordered_map<string,string> user_to_friend;
         unordered_map<string, int> user_to_group;
-
+        unordered_map<int, time_t> cfd_to_timestamp;
 };

@@ -26,7 +26,7 @@ void menu::chat_show(){
     cout << "4.查看好友请求" << endl;
     cout << "5.接受文件" << endl;
     cout << "6.黑名单操作" << endl;
-    cout << "7.查询好友" << endl;
+    cout << "7.好友在线状态" << endl;
     cout << "8.删除好友" << endl;
     cout << "9.创建群聊" << endl;
     cout << "10.加入群聊" << endl;

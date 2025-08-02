@@ -10,13 +10,17 @@ void select_new_owner_or_disband_group(const string& old_owner, unique_ptr<datab
     {
         string gid = row[0];
         MYSQL_RES* res2 = db->query_sql(
-            "SELECT username FROM group_members WHERE group_id="+gid+" AND username !='"+old_owner+"' LIMIT 1");
+            "SELECT username FROM group_members WHERE "
+            "group_id = "+gid+" AND username != '"+old_owner+"' LIMIT 1 AND status = 1");
         if (!res2) continue;
         MYSQL_ROW row2 = mysql_fetch_row(res2);
         if (row2) {
             string new_owner = row2[0];
             db->execute_sql("UPDATE `groups` SET owner_name ='"+new_owner+"' WHERE group_id="+gid);
-        } else {
+            db->execute_sql("UPDATE group_members SET role = 'owner' WHERE "
+                            "group_id = "+gid+" AND username = '"+new_owner+"' AND status = 1");
+        } 
+        else {
             db->execute_sql("DELETE FROM `groups` WHERE group_id = " + gid);
             db->execRedis("DEL group_message:" + gid);
         }
@@ -356,6 +360,8 @@ bool handle_break(json json_quest, unique_ptr<database> &db, json *reflact)
         return true;
     }
 
+    select_new_owner_or_disband_group(break_username, db);
+
     sql = "DELETE FROM user WHERE username = '" + break_username + "' AND password = '" + break_password + "'";
     bool res1 = db->execute_sql(sql);
 
@@ -395,8 +401,6 @@ bool handle_break(json json_quest, unique_ptr<database> &db, json *reflact)
 
         return true;
     }
-
-    select_new_owner_or_disband_group(break_username, db);
 
     *reflact = {
         {"sort", REFLACT},
@@ -1406,7 +1410,8 @@ bool handle_check_friend(json json_quest,json *reflact,unique_ptr<database>&db,u
     
     MYSQL_ROW row;
     string username = db->escape_mysql_string_full(json_quest["username"]);
-    MYSQL_RES *res = db->query_sql("SELECT friend_username FROM friendship WHERE username = '"+username+"'");
+    MYSQL_RES *res = db->query_sql("SELECT friend_username FROM friendship WHERE "
+                                    "username = '"+username+"' AND status = 1");
 
     if(res == nullptr){
         cout << "SELECT ERROR" << endl;

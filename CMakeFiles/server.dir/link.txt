@@ -1,1 +1,0 @@
-/usr/bin/c++ CMakeFiles/server.dir/ser/serve.cpp.o CMakeFiles/server.dir/ser/chat_serve.cpp.o CMakeFiles/server.dir/include/inetsockets_tcp.cpp.o CMakeFiles/server.dir/include/Threadpool.cpp.o CMakeFiles/server.dir/Database/Database.cpp.o -o server  -lhiredis -lncurses -lreadline /usr/lib/x86_64-linux-gnu/libmysqlclient.so
