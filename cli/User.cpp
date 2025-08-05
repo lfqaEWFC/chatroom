@@ -386,7 +386,7 @@ void handle_pri_chat(string username,string fri_user,int cfd,int FTP_ctrl_cfd,bo
     return;
 }
 
-void handle_black(string username,int cfd) {
+void handle_black(string username,int cfd,bool end_flag,pthread_cond_t* cond,pthread_mutex_t* mutex) {
 
     char* input;
     json blacklist;
@@ -413,6 +413,8 @@ void handle_black(string username,int cfd) {
             case 'a': {
                 char show[LARGESIZE];
                 char target[LARGESIZE];
+                show_user_friend(cfd,username);
+                handle_pthread_wait(end_flag, cond, mutex);
                 strcpy(show,"请输入要加入黑名单的用户名： ");
                 input = readline(show);
                 strcpy(target,input);
@@ -425,6 +427,8 @@ void handle_black(string username,int cfd) {
             case 'b': {
                 char show[LARGESIZE];
                 char target[LARGESIZE];
+                show_user_friend(cfd,username);
+                handle_pthread_wait(end_flag, cond, mutex);
                 strcpy(show,"请输入要移除黑名单的用户名： ");
                 input = readline(show);
                 strcpy(target,input);
@@ -666,7 +670,7 @@ void handle_retr_file(int FTP_ctrl_cfd,bool endflag,pthread_mutex_t* mutex,strin
     return;
 }
 
-void handle_create_group(string username,int cfd)
+void handle_create_group(string username,int cfd,bool& create_wait)
 {
     char* input;
     char group_show[MSGBUF];
@@ -679,17 +683,19 @@ void handle_create_group(string username,int cfd)
         input = readline(group_show);
         if(strlen(input) > GROUP_LEN)
         {
-            cout << "群聊名称过长，请重新输入...." << endl;
+            cout << "群聊名称过长，请重新创建..." << endl;
             free(input);
             wait_user_continue();
-            continue;
+            create_wait = false;
+            return;
         }
         if(is_all_space(input))
         {
             cout << "请勿输入全部为空的字符串..." << endl;
             free(input);
             wait_user_continue();
-            continue;
+            create_wait = false;
+            return;
         }
         break;
     }

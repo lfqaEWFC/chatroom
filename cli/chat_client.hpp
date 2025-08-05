@@ -400,9 +400,7 @@ public:
                     case 6:
                     {
                         system("clear");
-                        show_user_friend(cfd,username);
-                        handle_pthread_wait(end_flag, &recv_cond, &recv_lock);
-                        handle_black(username, cfd);
+                        handle_black(username, cfd,end_flag, &recv_cond, &recv_lock);
                         handle_pthread_wait(end_flag, &recv_cond, &recv_lock);
                         wait_user_continue();
                         break;
@@ -428,9 +426,13 @@ public:
                     case 9:
                     {
                         system("clear");
-                        handle_create_group(username,cfd);
-                        handle_pthread_wait(end_flag, &recv_cond, &recv_lock);
-                        wait_user_continue();
+                        bool create_wait = true;
+                        handle_create_group(username,cfd,create_wait);
+                        if(create_wait)
+                        {
+                            handle_pthread_wait(end_flag, &recv_cond, &recv_lock);
+                            wait_user_continue(); 
+                        }
                         break;
                     }
                     case 10:
@@ -582,7 +584,7 @@ private:
                 if(dirp == nullptr)
                 {
                     mkdir("download",0755);
-                    dirp = opendir("download");  // 重新打开
+                    dirp = opendir("download");
                     if (dirp == nullptr) {
                         perror("opendir failed");
                         return nullptr;
