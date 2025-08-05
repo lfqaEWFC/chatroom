@@ -400,6 +400,8 @@ public:
                     case 6:
                     {
                         system("clear");
+                        show_user_friend(cfd,username);
+                        handle_pthread_wait(end_flag, &recv_cond, &recv_lock);
                         handle_black(username, cfd);
                         handle_pthread_wait(end_flag, &recv_cond, &recv_lock);
                         wait_user_continue();
@@ -416,6 +418,8 @@ public:
                     case 8:
                     {
                         system("clear");
+                        show_user_friend(cfd,username);
+                        handle_pthread_wait(end_flag, &recv_cond, &recv_lock);
                         handle_delete_friend(username, cfd);
                         handle_pthread_wait(end_flag, &recv_cond, &recv_lock);
                         wait_user_continue();

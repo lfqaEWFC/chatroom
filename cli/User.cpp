@@ -548,6 +548,8 @@ void handle_show_file(string username, int cfd,bool endflag,
     if(num == 1)
     {
         *pri_chat_flag = true;
+        show_user_friend(cfd,username);
+        handle_pthread_wait(endflag, cond, mutex);
         strcpy(show,"请输入对端用户名称：");
         input = readline(show);
         json send_json = {
