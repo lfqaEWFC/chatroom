@@ -1452,6 +1452,15 @@ bool handle_del_friend(json json_quest,json *reflact,unique_ptr<database>&db,uno
     string username = db->escape_mysql_string_full(json_quest["username"]);
     string del_user = db->escape_mysql_string_full(json_quest["del_user"]);
 
+    if(username == del_user)
+    {
+        *reflact = {
+            {"sort",REFLACT},
+            {"request",DELETE_FRIEND},
+            {"reflact","您不能将自己删除..."}
+        };
+        return true;
+    }
     bool mysql_chk1 = db->execute_sql(
         "DELETE FROM friendship WHERE "
         "(username = '"+username+"' AND friend_username = '"+del_user+"') OR "
@@ -2754,7 +2763,7 @@ bool handle_group_chat(json json_quest,json* reflact,unique_ptr<database>&db,
         {
             *reflact = {
                 {"sort", ERROR},
-                {"reflact", "redis LRANGE reply error or nullptr"}
+                {"reflact", "redis LPOP reply error or nullptr"}
             };
             if (reply) db->free_reply(reply);
             return true;
