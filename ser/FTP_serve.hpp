@@ -598,14 +598,16 @@ class FTP
                 my_data_pair->retr_flag = true;
 
                 string sender = recvjson["sender"];
-                string filename = recvjson["filename"];
+                string filepath = recvjson["filepath"];
                 string receiver = recvjson["receiver"];
                 
                 getcwd(cur_path,LARGESIZE);
-                sprintf(load_filename,"%s_to_%s-%s",sender.c_str(),receiver.c_str(),filename.c_str());
+                replace(filepath.begin(), filepath.end(), '/', '_');
+                sprintf(load_filename,"%s_to_%s-%s",sender.c_str(),receiver.c_str(),filepath.c_str());
                 sprintf(open_path,"%s/%s/%s",cur_path,"file_tmp",load_filename);
                 my_data_pair->retr_filename = open_path;
-
+                cout << "load_filename: " << load_filename << endl;
+ 
                 if(open(my_data_pair->retr_filename.c_str(),O_RDONLY,0644) == -1){
                     send_json = {
                         {"sort",MESSAGE},
@@ -648,16 +650,18 @@ class FTP
                                 
                 my_data_pair->stor_flag = true;
                 
-                string filename = recvjson["filename"];
                 string sender = recvjson["sender"];
+                string filepath = recvjson["filepath"];
                 string receiver = recvjson["receiver"];
                 off_t file_size = recvjson["file_size"];
 
                 dirp = opendir("file_tmp");
                 if(dirp == nullptr)
                     mkdir("file_tmp",0755);
-                getcwd(cur_path,LARGESIZE);                
-                sprintf(creat_name,"%s_to_%s-%s",sender.c_str(),receiver.c_str(),filename.c_str());
+                getcwd(cur_path,LARGESIZE);
+
+                replace(filepath.begin(), filepath.end(), '/', '_');
+                sprintf(creat_name,"%s_to_%s-%s",sender.c_str(),receiver.c_str(),filepath.c_str());
                 sprintf(open_path,"%s/%s/%s",cur_path,"file_tmp",creat_name);
                 my_data_pair->stor_filename = open_path;
                         

@@ -1241,9 +1241,11 @@ bool handle_del_peer(json json_quest,unique_ptr<database>&db,unordered_map<strin
     return true;
 }
 
-bool handle_add_black(json json_quest, json *reflact, unique_ptr<database>& db)
+bool handle_add_black(json json_quest, json *reflact, unique_ptr<database>& db,
+    unordered_map<string,int> user_to_cfd,unordered_map<string, string> *user_to_friend)
 {
     string show_target = json_quest["target"];
+    string show_username = json_quest["username"];
     string username = db->escape_mysql_string_full(json_quest["username"]);
     string target = db->escape_mysql_string_full(json_quest["target"]);
 
@@ -1303,6 +1305,25 @@ bool handle_add_black(json json_quest, json *reflact, unique_ptr<database>& db)
             {"request", ADD_BLACKLIST},
             {"reflact", "成功将用户"+show_target+"添加至黑名单..."}
         };
+        auto it = user_to_cfd.find(show_target);
+        if(it != user_to_cfd.end())
+        {
+            int cfd = it->second;
+            json send_json = {
+                {"sort",MESSAGE},
+                {"request",ADD_BLACKLIST},
+                {"reflact","您被"+show_username+"加入了黑名单..."}
+            };
+            sendjson(send_json,cfd);
+            user_to_friend->erase(show_target);
+        }else {
+            string redis_key = "offline:system_notice:" + show_target;
+            json msg = {
+                {"timestamp",get_current_mysql_timestamp()},
+                {"message","你已被 "+show_username+" 加入了黑名单..."}
+            };
+            db->lpushJson(redis_key,msg); 
+        }
     } 
     else {
         *reflact = {
@@ -1315,12 +1336,13 @@ bool handle_add_black(json json_quest, json *reflact, unique_ptr<database>& db)
     return true;
 }
 
-bool handle_rem_black(json json_quest,json *reflact,unique_ptr<database>&db){
+bool handle_rem_black(json json_quest,json *reflact,unique_ptr<database>&db,unordered_map<string,int> user_to_cfd){
     
     int status;
     int per_status;
     string sql_update;
     string show_target = json_quest["target"];
+    string show_username = json_quest["username"];
     string username = db->escape_mysql_string_full(json_quest["username"]);
     string target = db->escape_mysql_string_full(json_quest["target"]);
 
@@ -1394,6 +1416,24 @@ bool handle_rem_black(json json_quest,json *reflact,unique_ptr<database>&db){
             {"request", REMOVE_BLACKLIST},
             {"reflact", "成功将用户"+show_target+"移出黑名单..."}
         };
+        auto it = user_to_cfd.find(show_target);
+        if(it != user_to_cfd.end())
+        {
+            int cfd = it->second;
+            json send_json = {
+                {"sort",MESSAGE},
+                {"request",ADD_BLACKLIST},
+                {"reflact","您被 "+show_username+" 移除出黑名单..."}
+            };
+            sendjson(send_json,cfd);
+        }else {
+            string redis_key = "offline:system_notice:" + show_target;
+            json msg = {
+                {"timestamp",get_current_mysql_timestamp()},
+                {"message","你已被 "+show_username+" 移除出黑名单..."}
+            };
+            db->lpushJson(redis_key,msg); 
+        }
     }
     else{
         *reflact = {
@@ -1447,8 +1487,12 @@ bool handle_check_friend(json json_quest,json *reflact,unique_ptr<database>&db,u
     return true;
 }
 
-bool handle_del_friend(json json_quest,json *reflact,unique_ptr<database>&db,unordered_map<string,int> user_to_cfd) 
+bool handle_del_friend(json json_quest,json *reflact,unique_ptr<database>&db,
+    unordered_map<string,int> user_to_cfd,unordered_map<string, string> *user_to_friend) 
 {
+    MYSQL* affect = db->get_mysql_conn();
+    string show_username = json_quest["username"];
+    string show_del_user = json_quest["del_user"];
     string username = db->escape_mysql_string_full(json_quest["username"]);
     string del_user = db->escape_mysql_string_full(json_quest["del_user"]);
 
@@ -1467,16 +1511,7 @@ bool handle_del_friend(json json_quest,json *reflact,unique_ptr<database>&db,uno
         "(username = '"+del_user+"' AND friend_username = '"+username+"');"
     );
 
-    MYSQL* affect = db->get_mysql_conn();
-    my_ulonglong affected1 = mysql_affected_rows(affect);
-
-    if (!mysql_chk1) {
-        *reflact = {
-            {"sort", ERROR},
-            {"reflact", "MYSQL DELETE ERROR (friendship)"}
-        };
-        return true;
-    }
+    my_ulonglong affected = mysql_affected_rows(affect);
 
     bool mysql_chk2 = db->execute_sql(
         "DELETE FROM private_message WHERE "
@@ -1484,7 +1519,13 @@ bool handle_del_friend(json json_quest,json *reflact,unique_ptr<database>&db,uno
         "(sender = '"+del_user+"' AND receiver = '"+username+"');"
     );
 
-    if (!mysql_chk2) {
+    bool mysql_chk3 = db->execute_sql(
+        "DELETE FROM private_file WHERE "
+        "(sender = '"+username+"' AND receiver = '"+del_user+"') OR "
+        "(sender = '"+del_user+"' AND receiver = '"+username+"');"
+    );
+
+    if (!mysql_chk1 || !mysql_chk2 || !mysql_chk3) {
         *reflact = {
             {"sort", ERROR},
             {"reflact", "MYSQL DELETE ERROR (private_message)"}
@@ -1492,7 +1533,7 @@ bool handle_del_friend(json json_quest,json *reflact,unique_ptr<database>&db,uno
         return true;
     }
 
-    if (affected1 > 0) {
+    if (affected > 0) {
         *reflact = {
             {"sort", REFLACT},
             {"request", DELETE_FRIEND},
@@ -1514,17 +1555,18 @@ bool handle_del_friend(json json_quest,json *reflact,unique_ptr<database>&db,uno
         int cfd = it->second;
         json send_json = {
             {"sort",MESSAGE},
-            {"request",NON_PEER_CHAT},
-            {"message","通知：你已被 "+username+" 删除..."}
+            {"request",ADD_BLACKLIST},
+            {"reflact","通知：你已被 "+show_username+" 删除..."}
         };
         sendjson(send_json,cfd);
+        user_to_friend->erase(show_del_user);
     }
     else
     {
         string redis_key = "offline:system_notice:" + nor_del_user;
         json msg = {
             {"timestamp",get_current_mysql_timestamp()},
-            {"message","你已被 "+username+" 删除..."}
+            {"message","你已被 "+show_username+" 删除..."}
         };
         db->lpushJson(redis_key,msg);
     }
@@ -1539,13 +1581,39 @@ bool handle_add_file(json json_quest,json *reflact,unique_ptr<database>&db,
     string sender = json_quest["sender"];
     bool group_flag = json_quest["group_flag"];
     string filename = json_quest["filename"];
+    string filepath = json_quest["filepath"];
     string receiver = json_quest["receiver"];
     string safe_sender = db->escape_mysql_string_full(json_quest["sender"]);
     string safe_filename = db->escape_mysql_string_full(json_quest["filename"]);
+    string safe_filepath = db->escape_mysql_string_full(json_quest["filepath"]);
     string safe_receiver = db->escape_mysql_string_full(json_quest["receiver"]);
 
     if(!group_flag){
-        MYSQL_RES *res = db->query_sql("SHOW TABLES LIKE 'private_file'");
+        MYSQL_RES *res = db->query_sql(
+            "SELECT * FROM friendship WHERE username = '"+safe_sender+"' AND "
+            "friend_username = '"+safe_receiver+"' AND status = 1");
+        if(res == nullptr)
+        {
+            cout << "SELECT failed" << endl;
+            *reflact = {
+                {"sort",ERROR},
+                {"reflact","MYSQL SELECT ERROR..."}
+            };
+            return true; 
+        }
+        uint64_t rows = mysql_num_rows(res);
+        if(rows <= 0)
+        {
+            *reflact = {
+                {"sort",MESSAGE},
+                {"request",ADD_FILE},
+                {"message","上传文件成功，但对端已经屏蔽或删除..."}
+            };
+            db->free_result(res);
+            return true;
+        }   
+        db->free_result(res);
+        res = db->query_sql("SHOW TABLES LIKE 'private_file'");
         if(res == nullptr){
             cout << "SHOW failed" << endl;
             *reflact = {
@@ -1560,6 +1628,7 @@ bool handle_add_file(json json_quest,json *reflact,unique_ptr<database>&db,
                 "CREATE TABLE private_file ("
                 "    id INT AUTO_INCREMENT PRIMARY KEY,"
                 "    filename VARCHAR(64) NOT NULL,"
+                "    filepath VARCHAR(64) NOT NULL,"
                 "    sender VARCHAR(64) NOT NULL,"
                 "    receiver VARCHAR(64) NOT NULL,"
                 "    CONSTRAINT fk_private_file_sender "
@@ -1572,7 +1641,7 @@ bool handle_add_file(json json_quest,json *reflact,unique_ptr<database>&db,
                 "        REFERENCES user(username) "
                 "        ON DELETE CASCADE "
                 "        ON UPDATE CASCADE,"
-                "    UNIQUE KEY uk_sender_receiver_filename (sender, receiver, filename)"
+                "    UNIQUE KEY uk_sender_receiver_filename (sender, receiver, filepath)"
                 ");"
             );            
             if(execchk == false){
@@ -1584,8 +1653,9 @@ bool handle_add_file(json json_quest,json *reflact,unique_ptr<database>&db,
                 return true;
             }
         }
-        bool exechk = db->execute_sql("INSERT INTO private_file(sender, receiver, filename) "
-                                      "VALUES('" +safe_sender+ "','" +safe_receiver+ "','"+safe_filename+"')");
+        bool exechk = db->execute_sql("INSERT INTO private_file(sender, receiver, filename,filepath) "
+                                      "VALUES('" +safe_sender+ "','" +safe_receiver+ "',"
+                                      "'"+safe_filename+"','"+safe_filepath+"')");
         if(exechk == false){
             *reflact = {
                 {"sort",MESSAGE},
@@ -1670,8 +1740,31 @@ bool handle_add_file(json json_quest,json *reflact,unique_ptr<database>&db,
     }
     else
     {
-        MYSQL_RES *res = db->query_sql("SHOW TABLES LIKE 'group_file'");
         string gid = safe_receiver;
+        MYSQL_RES *res = db->query_sql("SELECT * FROM group_members WHERE "
+            "group_id = "+gid+" AND username = '"+safe_sender+"' AND status = 1");
+        uint64_t rows = mysql_num_rows(res);
+        if(res == nullptr)
+        {
+            cout << "SELECT failed" << endl;
+            *reflact = {
+                {"sort",ERROR},
+                {"reflact","MYSQL SELECT ERROR..."}
+            };
+            return true; 
+        }
+        if(rows <= 0)
+        {
+            *reflact = {
+                {"sort",MESSAGE},
+                {"request",ADD_FILE},
+                {"message","上传文件成功，但对端已经屏蔽或删除..."}
+            };
+            db->free_result(res);
+            return true;
+        }
+        db->free_result(res);
+        res = db->query_sql("SHOW TABLES LIKE 'group_file'");
         if(res == nullptr)
         {
             cout << "SHOW failed" << endl;
@@ -1688,6 +1781,7 @@ bool handle_add_file(json json_quest,json *reflact,unique_ptr<database>&db,
                 "CREATE TABLE group_file ("
                 "    id INT AUTO_INCREMENT PRIMARY KEY,"
                 "    filename VARCHAR(64) NOT NULL,"
+                "    filepath VARCHAR(64) NOT NULL,"
                 "    sender VARCHAR(64) NOT NULL,"
                 "    group_id BIGINT NOT NULL,"
                 "    CONSTRAINT fk_group_file_sender "
@@ -1700,7 +1794,7 @@ bool handle_add_file(json json_quest,json *reflact,unique_ptr<database>&db,
                 "        REFERENCES `groups`(group_id) "
                 "        ON DELETE CASCADE "
                 "        ON UPDATE CASCADE,"
-                "    UNIQUE KEY uk_group_sender_filename (group_id, sender, filename)"
+                "    UNIQUE KEY uk_group_sender_filename (group_id, sender, filepath)"
                 ");"
             );
             if(execchk == false){
@@ -1712,8 +1806,9 @@ bool handle_add_file(json json_quest,json *reflact,unique_ptr<database>&db,
                 return true;
             }
         }
-        bool execchk = db->execute_sql("INSERT INTO group_file(sender, group_id, filename) "
-                                       "VALUES('" +safe_sender+ "','" +gid+ "','"+safe_filename+"')");
+        bool execchk = db->execute_sql("INSERT INTO group_file(sender, group_id, filename, filepath) "
+                                       "VALUES('" +safe_sender+ "','" +gid+ "',"
+                                       "'"+safe_filename+"','"+safe_filepath+"')");
         if(execchk == false){
             *reflact = {
                 {"sort",MESSAGE},
@@ -1811,8 +1906,36 @@ bool handle_show_file(json json_quest,json *reflact,unique_ptr<database>&db){
         string username = db->escape_mysql_string_full(json_quest["username"]);
         string fri_user = db->escape_mysql_string_full(json_quest["sender"]);
     
-        MYSQL_RES* res = db->query_sql("SELECT filename FROM private_file "
-                                       "WHERE sender = '"+fri_user+"' AND receiver = '"+username+"'");
+        MYSQL_RES* res = db->query_sql(
+            "SELECT * FROM friendship WHERE "
+            "username = '"+username+"' AND friend_username = '"+fri_user+"' AND status != 0"
+        );
+        if(res == nullptr)
+        {
+            cout << "SELECT failed" << endl;
+            *reflact = {
+                {"sort",ERROR},
+                {"reflact","MYSQL SELECT ERROR..."}
+            };
+            return true;   
+        }
+        uint64_t rows = mysql_num_rows(res);
+        if(rows <= 0)
+        {
+            *reflact = {
+                {"sort",REFLACT},
+                {"request",SHOW_FILE},
+                {"get_flag",false},
+                {"group_flag",false},
+                {"reflact",""+sender+" 与您不是好友关系..."}
+            };
+            db->free_result(res);
+            return true; 
+        }
+
+        db->free_result(res);
+        res = db->query_sql("SELECT filepath FROM private_file "
+                            "WHERE sender = '"+fri_user+"' AND receiver = '"+username+"'");
         if(res == nullptr){
             cout << "SELECT failed" << endl;
             *reflact = {
@@ -1822,22 +1945,23 @@ bool handle_show_file(json json_quest,json *reflact,unique_ptr<database>&db){
             return true; 
         }
     
-        int rows = mysql_num_rows(res);
+        rows = mysql_num_rows(res);
         if(rows == 0){
             *reflact = {
                 {"sort",REFLACT},
                 {"request",SHOW_FILE},
                 {"get_flag",false},
                 {"group_flag",false},
-                {"reflact",""+sender+" 不存在或并未向您发送文件..."}
+                {"reflact",""+sender+" 并未向您发送文件..."}
             };
+            db->free_result(res);
             return true; 
         }
-        json filenames = json::array();
+        json filepaths = json::array();
         while((row = mysql_fetch_row(res)) != nullptr){
             if(row[0] != nullptr){
-                string filename = row[0];
-                filenames.push_back(filename);
+                string filepath = row[0];
+                filepaths.push_back(filepath);
             }
         }
         *reflact = {
@@ -1846,8 +1970,9 @@ bool handle_show_file(json json_quest,json *reflact,unique_ptr<database>&db){
             {"file_user",sender},
             {"get_flag",true},
             {"group_flag",false},
-            {"reflact",filenames}
+            {"reflact",filepaths}
         };
+        db->free_result(res);
         return true;
     }
     else
@@ -1855,7 +1980,12 @@ bool handle_show_file(json json_quest,json *reflact,unique_ptr<database>&db){
         MYSQL_RES* res;
         MYSQL_ROW row;
         long gid = json_quest["group_id"];
-        res = db->query_sql("SELECT sender,filename FROM group_file WHERE group_id = "+to_string(gid)+"");
+        string username = db->escape_mysql_string_full(json_quest["username"]);
+
+        res = db->query_sql(
+            "SELECT * FROM group_members WHERE "
+            "username = '"+username+"' AND group_id = "+to_string(gid)+" AND status != 0"
+        );
         if(res == nullptr)
         {
             *reflact = {
@@ -1872,18 +2002,42 @@ bool handle_show_file(json json_quest,json *reflact,unique_ptr<database>&db){
                 {"request",SHOW_FILE},
                 {"get_flag",false},
                 {"group_flag",false},
+                {"reflact","您不在当前群组中..."}
+            };
+            db->free_result(res);
+            return true;
+        }
+        db->free_result(res);
+        res = db->query_sql("SELECT sender,filepath FROM group_file WHERE group_id = "+to_string(gid)+"");
+        if(res == nullptr)
+        {
+            *reflact = {
+                {"sort",ERROR}, 
+                {"reflact","MYSQL SELECT ERROR"}
+            };
+            return true;
+        }
+        rows = mysql_num_rows(res);
+        if(rows <= 0)
+        {
+            *reflact = {
+                {"sort",REFLACT},
+                {"request",SHOW_FILE},
+                {"get_flag",false},
+                {"group_flag",false},
                 {"reflact","gid 为 "+to_string(gid)+" 的群组没有需要下载的文件..."}
             };
+            db->free_result(res);
             return true;
         }
         json array = json::array();
         while((row = mysql_fetch_row(res)) != nullptr)
         {
             string sender = row[0];
-            string filename = row[1];
+            string filepath = row[1];
             json msg = {
                 {"sender",sender},
-                {"filename",filename}
+                {"filepath",filepath}
             };
             array.push_back(msg);
         }
@@ -1895,10 +2049,11 @@ bool handle_show_file(json json_quest,json *reflact,unique_ptr<database>&db){
             {"group_id",gid},
             {"reflact",array}
         };
+        db->free_result(res);
+        return true;
     }
-
+    
     return true;
-
 }
 
 bool handle_create_group(json json_quest,json* reflact,unique_ptr<database>&db)
@@ -2804,8 +2959,10 @@ bool handle_group_chat(json json_quest,json* reflact,unique_ptr<database>&db,
             return true;
         }
     }
-    res = db->query_sql("SELECT username FROM group_members WHERE "
-                        "group_id = "+to_string(gid)+" AND username <> '"+safe_username+"';");
+    res = db->query_sql("SELECT username FROM group_members "
+                        "WHERE group_id = "+to_string(gid)+" "                       
+                        "AND username <> '"+safe_username+"' "
+                        "AND status != 0;");
     if(res == nullptr)
     {
         *reflact = {
@@ -2897,7 +3054,8 @@ bool handle_show_member(json json_quest,json *reflact,unique_ptr<database>&db)
     MYSQL_RES *res;
     MYSQL_ROW row;
 
-    res = db->query_sql("SELECT username,role from group_members WHERE group_id = "+to_string(gid)+"");
+    res = db->query_sql("SELECT username,role from group_members "
+                        "WHERE group_id = "+to_string(gid)+" AND status != 0");
     if(res == nullptr)
     {
         *reflact = {
@@ -3041,7 +3199,7 @@ bool handle_show_friend(json json_quest,json *reflact,unique_ptr<database>&db)
     MYSQL_ROW row;
 
     res = db->query_sql("SELECT friend_username FROM friendship WHERE "
-                        "username = '"+safe_username+"' AND status = 1");
+                        "username = '"+safe_username+"' AND status != 0");
     if(res == nullptr)
     {
         *reflact = {
@@ -3072,6 +3230,7 @@ bool handle_add_member(json json_quest, json* reflact, unique_ptr<database>& db,
     long gid = json_quest["gid"];
     string safe_gid = to_string(json_quest["gid"].get<long>());
     string safe_addname = db->escape_mysql_string_full(json_quest["addname"]);
+    string safe_username = db->escape_mysql_string_full(json_quest["username"]);
     string username = json_quest["username"];
     string addname = json_quest["addname"];
     string redis_key = "offline:system_notice:" + addname;
@@ -3085,14 +3244,35 @@ bool handle_add_member(json json_quest, json* reflact, unique_ptr<database>& db,
         };
         return true;
     }
-    string sql = "INSERT INTO group_members (group_id, username, status, role) VALUES "
+    string sql = "SELECT * FROM friendship WHERE "
+                 "username = '"+safe_username+"' AND friend_username = '"+safe_addname+"' AND status != 0";
+    MYSQL_RES *res = db->query_sql(sql);
+    if(res == nullptr)
+    {
+        *reflact = {
+            {"sort", ERROR},
+            {"reflact", "MYSQL SELECT ERROR"}
+        };
+        return true;
+    }
+    uint64_t rows = mysql_num_rows(res);
+    if(rows <= 0)
+    {
+        *reflact = { 
+            {"sort", REFLACT},
+            {"request",ADD_GROUP_MEM},
+            {"reflact", "添加成员失败，该成员不是你的好友..."}
+        };
+        return true;
+    }
+    sql = "INSERT INTO group_members (group_id, username, status, role) VALUES "
                  "(" + safe_gid + ", '" + safe_addname + "', 1, 'member')";
     bool execchk = db->execute_sql(sql);
     if (!execchk) {
         *reflact = { 
             {"sort", REFLACT},
             {"request",ADD_GROUP_MEM},
-            {"reflact", "添加成员失败，可能群组/用户不存在或重复"}
+            {"reflact", "添加成员失败，可能群组/用户不存在或重复..."}
         };
         return true;
     }
@@ -3124,7 +3304,7 @@ bool handle_add_member(json json_quest, json* reflact, unique_ptr<database>& db,
 }
 
 bool handle_break_group(json json_quest, json* reflact, unique_ptr<database>& db, 
-                        unordered_map<string,int> user_to_cfd,unordered_map<string,int> user_to_group) 
+                        unordered_map<string,int> user_to_cfd,unordered_map<string,int>* user_to_group) 
 {
     MYSQL_RES* res;
     MYSQL_ROW row;
@@ -3164,7 +3344,7 @@ bool handle_break_group(json json_quest, json* reflact, unique_ptr<database>& db
         if(it != user_to_cfd.end())
         {
             int cfd = it->second;
-            if(user_to_group[deluser] == gid)
+            if((*user_to_group)[deluser] == gid)
             {
                 send_json = {
                     {"sort",MESSAGE},
@@ -3172,6 +3352,7 @@ bool handle_break_group(json json_quest, json* reflact, unique_ptr<database>& db
                     {"outflag",true},
                     {"message","通知: gid 为 "+to_string(gid)+" 的群聊已经被解散"}
                 };
+                user_to_group->erase(deluser);
             }
             else
             {
@@ -3222,7 +3403,7 @@ bool handle_break_group(json json_quest, json* reflact, unique_ptr<database>& db
 }
 
 bool handle_kill_user(json json_quest, json* reflact, unique_ptr<database>& db, 
-                      unordered_map<string,int> user_to_cfd,unordered_map<string,int> user_to_group) 
+                      unordered_map<string,int> user_to_cfd,unordered_map<string,int>* user_to_group) 
 {
     MYSQL_RES* res;
     MYSQL_ROW row;
@@ -3291,12 +3472,24 @@ bool handle_kill_user(json json_quest, json* reflact, unique_ptr<database>& db,
         };
         return true;
     }
+
+    sql = "DELETE FROM group_file WHERE "
+          "sender = '"+safe_kill_user+"' AND group_id = "+safe_gid+"";
+    execchk = db->execute_sql(sql);
+    if (!execchk) {
+        *reflact = { 
+            {"sort", ERROR},
+            {"reflact", "MYSQL DELETE ERROR"}
+        };
+        return true;
+    }
+
     auto it = user_to_cfd.find(kill_user);
     if(it != user_to_cfd.end())
     {
         int cfd = it->second;
         json send_json;
-        if(user_to_group[username] == gid)
+        if((*user_to_group)[username] == gid)
         {
             send_json = {
                 {"sort",MESSAGE},
@@ -3304,6 +3497,8 @@ bool handle_kill_user(json json_quest, json* reflact, unique_ptr<database>& db,
                 {"outflag",true},
                 {"message","通知: 你已被 "+username+"  移出 gid 为 "+to_string(gid)+" 的群聊"}
             };
+            auto it = user_to_group->find(kill_user);
+            user_to_group->erase(it);
         }
         else
         {
@@ -3334,9 +3529,10 @@ bool handle_kill_user(json json_quest, json* reflact, unique_ptr<database>& db,
 }
 
 bool handle_del_group(json json_quest, json* reflact, unique_ptr<database>& db, 
-                      unordered_map<string,int> user_to_cfd) 
+                      unordered_map<string,int> user_to_cfd,unordered_map<string,int>* user_to_group) 
 {
     long gid = json_quest["gid"];
+    string username = json_quest["username"];
     string safe_gid = to_string(gid);
     string safe_username = db->escape_mysql_string_full(json_quest["username"]);
 
@@ -3363,5 +3559,17 @@ bool handle_del_group(json json_quest, json* reflact, unique_ptr<database>& db,
         {"request",DELETE_GROUP}, 
         {"reflact", "群聊退出成功"} 
     };
+    sql = "DELETE FROM group_file WHERE "
+          "sender = '"+safe_username+"' AND group_id = "+safe_gid+"";
+    execchk = db->execute_sql(sql);
+    if (!execchk) {
+        *reflact = { 
+            {"sort", ERROR},
+            {"reflact", "MYSQL DELETE ERROR"}
+        };
+        return true;
+    }
+    
+    user_to_group->erase(username);
     return true;
 }

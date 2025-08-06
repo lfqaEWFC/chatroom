@@ -266,7 +266,7 @@ void handle_pri_chat(string username,string fri_user,int cfd,int FTP_ctrl_cfd,bo
     *pri_show = "["+username+"->"+fri_user+"]: ";
 
     while (true && !(*end_flag) && *pri_flag){
-        
+        if(*end_flag || !(*pri_flag)) break;
         string input;
         char show[MAX_REASONABLE_SIZE];
     
@@ -289,9 +289,10 @@ void handle_pri_chat(string username,string fri_user,int cfd,int FTP_ctrl_cfd,bo
                 << "- 当前尚不支持文件名有特殊字符的文件传输\n" << endl;
 
             while (true && !(*end_flag) && *pri_flag){
+                if(*end_flag || !(*pri_flag)) break;
                 char *file_input = readline(file_show);
 
-                if(strstr(file_input,"LIST")){
+                if(strstr(file_input,"LIST") && !(*end_flag) && *pri_flag){
                     char *cmd = NULL;
                     char *path = NULL;
                     char *saveptr = NULL;
@@ -316,7 +317,7 @@ void handle_pri_chat(string username,string fri_user,int cfd,int FTP_ctrl_cfd,bo
                     sendjson(send_json,FTP_ctrl_cfd);
                     handle_pthread_wait(*end_flag,cond,mutex);
                 }
-                else if(strstr(file_input,"STOR")){                    
+                else if(strstr(file_input,"STOR") && !(*end_flag) && *pri_flag){                    
                     string input_str(file_input);
                     size_t pos = input_str.find(' ');
                     string filepath;
@@ -353,7 +354,10 @@ void handle_pri_chat(string username,string fri_user,int cfd,int FTP_ctrl_cfd,bo
                     break;
                 }
                 else{
-                    cout << "命令错误，请重新输入命令..." << endl;
+                    if(*end_flag || !*pri_flag)
+                        cout << "您不能向该好友发送文件..." << endl;
+                    else
+                        cout << "命令错误，请重新输入命令..." << endl;
                     continue;
                 }
                 free(file_input);
@@ -589,7 +593,8 @@ void handle_show_file(string username, int cfd,bool endflag,
             json send_json = {
                 {"group_flag",true},
                 {"request",SHOW_FILE},
-                {"group_id",gid}
+                {"group_id",gid},
+                {"username",username}
             };
             sendjson(send_json,cfd);
         }
@@ -599,7 +604,7 @@ void handle_show_file(string username, int cfd,bool endflag,
 }
 
 void handle_retr_file(int FTP_ctrl_cfd,bool endflag,pthread_mutex_t* mutex,string* fri_username,
-                      pthread_cond_t* cond,bool* FTP_retr_flag,string* file_name,bool group_flag)
+                      pthread_cond_t* cond,bool* FTP_retr_flag,string* file_path,bool group_flag)
 {
     int cfd = FTP_ctrl_cfd;
     char fileshow[MSGBUF];
@@ -609,7 +614,7 @@ void handle_retr_file(int FTP_ctrl_cfd,bool endflag,pthread_mutex_t* mutex,strin
     if(group_flag)
     {
         string sender;
-        string filename;
+        string filepath;
         char *file_input;
         while(true){
             strcpy(fileshow,"请输入文件发送者：");
@@ -625,14 +630,14 @@ void handle_retr_file(int FTP_ctrl_cfd,bool endflag,pthread_mutex_t* mutex,strin
             sender = file_input;
             *fri_username = sender;
             free(file_input);
-            strcpy(fileshow,"请输入文件名称：");
+            strcpy(fileshow,"请输入文件路径：");
             file_input = readline(fileshow);  
-            filename = file_input;
-            *file_name = filename;
+            filepath = file_input;
+            *file_path = filepath;
             free(file_input);
             json send_json = {
                 {"cmd","PASV"},
-                {"filename",filename}
+                {"filename",filepath}
             };
             sendjson(send_json,cfd);
                     *FTP_retr_flag = true;
@@ -642,28 +647,28 @@ void handle_retr_file(int FTP_ctrl_cfd,bool endflag,pthread_mutex_t* mutex,strin
     else
     {
         while(true && !endflag){
-            strcpy(fileshow,"请输入文件名称: ");
-            char* filename = readline(fileshow);
-            if(strcmp(filename,"EXIT") == 0)
+            strcpy(fileshow,"请输入文件路径: ");
+            char* filepath = readline(fileshow);
+            if(strcmp(filepath,"EXIT") == 0)
             {
                 cout << "退出文件接收模式..." << endl;
                 wait_user_continue();
                 fri_username->clear();
-                free(filename);
+                free(filepath);
                 return;
             }
             else
             {
-                *file_name = filename;
+                *file_path = filepath;
                 json send_json = {
                     {"cmd","PASV"},
-                    {"filename",filename}
+                    {"filename",filepath}
                 };
                 sendjson(send_json,cfd);
             }
             *FTP_retr_flag = true;
             handle_pthread_wait(endflag,cond,mutex);
-            free(filename);
+            free(filepath);
         }
     }
 
@@ -912,7 +917,7 @@ void handle_group_chat(int cfd,string username,string group_role,long group_id,
             handle_pthread_wait(end_flag,cond,mutex);
             break;
         }
-        else if(message == "/file")
+        else if(message == "/file" && !end_flag && *group_flag)
         {
             cout << endl;
             char file_show[MAX_REASONABLE_SIZE];
@@ -927,9 +932,10 @@ void handle_group_chat(int cfd,string username,string group_role,long group_id,
                 << "- 当前尚不支持文件名有特殊字符的文件传输\n" << endl;
 
             while (true && !end_flag && *group_flag){
-                char *file_input = readline(file_show);
+                if(end_flag || !(*group_flag)) break;
 
-                if(strstr(file_input,"LIST")){
+                char *file_input = readline(file_show);
+                if(strstr(file_input,"LIST") && !end_flag && *group_flag){
                     char *cmd = NULL;
                     char *path = NULL;
                     char *saveptr = NULL;
@@ -954,7 +960,7 @@ void handle_group_chat(int cfd,string username,string group_role,long group_id,
                     sendjson(send_json,FTP_ctrl_cfd);
                     handle_pthread_wait(end_flag,cond,mutex);
                 }
-                else if(strstr(file_input,"STOR")){                    
+                else if(strstr(file_input,"STOR") && !end_flag && *group_flag){                    
                     string input_str(file_input);
                     size_t pos = input_str.find(' ');
                     string filepath;
@@ -992,22 +998,27 @@ void handle_group_chat(int cfd,string username,string group_role,long group_id,
                     break;
                 }
                 else{
-                    cout << "命令错误，请重新输入命令..." << endl;
+                    if(end_flag || !*group_flag)
+                        cout << "您无法在这个群聊中发送文件..." << endl;
+                    else
+                        cout << "命令错误，请重新输入命令..." << endl;
                     continue;
                 }
                 free(file_input);         
             }
             continue;
         }
-        else if(message == "/admin")
+        else if(message == "/admin" && !end_flag && *group_flag)
         {   
             char *admin;
             char show[MSGBUF];
             json send_json;
 
             if(group_role != "owner")
-                cout << "你没有权限执行此操作..." << endl;
-            else
+            {
+                cout << "你没有权限执行此操作..." << endl; 
+                continue;               
+            } else
             {
                 show_group_members(cfd,username,group_id);
                 handle_pthread_wait(end_flag,cond,mutex);
@@ -1025,7 +1036,7 @@ void handle_group_chat(int cfd,string username,string group_role,long group_id,
             handle_pthread_wait(end_flag,cond,mutex);
             continue;
         }
-        else if(message == "/add")
+        else if(message == "/add" && !end_flag && *group_flag)
         {
             char *admem;
             char show[MSGBUF];
@@ -1046,11 +1057,13 @@ void handle_group_chat(int cfd,string username,string group_role,long group_id,
             free(admem);
             continue;
         }
-        else if(message == "/break")
+        else if(message == "/break" && !end_flag && *group_flag)
         {
             if(group_role != "owner")
+            {
                 cout << "你没有权限执行这个操作..." << endl;
-            else
+                continue;
+            } else
             {
                 json send_json = {
                     {"request",BREAK_GROUP},
@@ -1062,11 +1075,13 @@ void handle_group_chat(int cfd,string username,string group_role,long group_id,
             handle_pthread_wait(end_flag,cond,mutex);
             break;
         }
-        else if(message == "/kill")
+        else if(message == "/kill" && !end_flag && *group_flag)
         {
             if(group_role == "member")
+            {
                 cout << "你没有权限执行这个操作..." << endl;
-            else
+                continue;
+            } else
             {
                 char *kill;
                 char show[MSGBUF];
@@ -1088,10 +1103,13 @@ void handle_group_chat(int cfd,string username,string group_role,long group_id,
             handle_pthread_wait(end_flag,cond,mutex);
             continue;
         }
-        else if(message == "/delete")
+        else if(message == "/delete" && !end_flag && *group_flag)
         {
             if(group_role == "owner")
+            {
                 cout << "群主只能解散群聊..." << endl;
+                continue;
+            }   
             json send_json = {
                 {"request",DELETE_GROUP},
                 {"username",username},
@@ -1101,14 +1119,16 @@ void handle_group_chat(int cfd,string username,string group_role,long group_id,
             handle_pthread_wait(end_flag,cond,mutex);
             break;
         }
-
-        send_json = {
-            {"request",GROUP_CHAT},
-            {"username",username},
-            {"gid",group_id},
-            {"message",message}
-        };
-        sendjson(send_json,cfd);
+        if(!end_flag && *group_flag)
+        {
+            send_json = {
+                {"request",GROUP_CHAT},
+                {"username",username},
+                {"gid",group_id},
+                {"message",message}
+            };
+            sendjson(send_json,cfd);
+        }
     }
     
     return;

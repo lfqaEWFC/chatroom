@@ -603,14 +603,14 @@ class serve{
                 }
                 case(ADD_BLACKLIST):{
                     json *reflact = new json;
-                    if(handle_add_black(json_quest,reflact,db))
+                    if(handle_add_black(json_quest,reflact,db,*new_args->user_to_cfd,new_args->user_to_friend))
                         sendjson(*reflact,new_args->cfd);
                     delete reflact;
                     break;
                 }
                 case(REMOVE_BLACKLIST):{
                     json *reflact = new json;
-                    if(handle_rem_black(json_quest,reflact,db))
+                    if(handle_rem_black(json_quest,reflact,db,*new_args->user_to_cfd))
                         sendjson(*reflact,new_args->cfd);
                     delete reflact;
                     break;
@@ -624,7 +624,7 @@ class serve{
                 }
                 case(DELETE_FRIEND):{
                     json *reflact = new json;
-                    if(handle_del_friend(json_quest,reflact,db,*new_args->user_to_cfd))
+                    if(handle_del_friend(json_quest,reflact,db,*new_args->user_to_cfd,new_args->user_to_friend))
                         sendjson(*reflact,new_args->cfd);
                     delete reflact;
                     break;
@@ -744,21 +744,21 @@ class serve{
                 }
                 case(BREAK_GROUP):{
                     json *reflact = new json;
-                    if(handle_break_group(json_quest,reflact,db,*new_args->user_to_cfd,*new_args->user_to_group))
+                    if(handle_break_group(json_quest,reflact,db,*new_args->user_to_cfd,new_args->user_to_group))
                         sendjson(*reflact,new_args->cfd);
                     delete reflact;
                     break;
                 }
                 case(KILL_GROUP_USER):{
                     json *reflact = new json;
-                    if(handle_kill_user(json_quest,reflact,db,*new_args->user_to_cfd,*new_args->user_to_group))
+                    if(handle_kill_user(json_quest,reflact,db,*new_args->user_to_cfd,new_args->user_to_group))
                         sendjson(*reflact,new_args->cfd);
                     delete reflact;
                     break;
                 }
                 case(DELETE_GROUP):{
                     json *reflact = new json;
-                    if(handle_del_group(json_quest,reflact,db,*new_args->user_to_cfd))
+                    if(handle_del_group(json_quest,reflact,db,*new_args->user_to_cfd,new_args->user_to_group))
                         sendjson(*reflact,new_args->cfd);
                     delete reflact;
                     break;

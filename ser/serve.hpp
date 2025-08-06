@@ -31,13 +31,14 @@ bool handle_history_pri(json json_quest, unique_ptr<database> &db, json *reflact
                         unordered_map<string, string> user_to_friend);
 bool handle_private_chat(json json_quest,unique_ptr<database> &db,json *reflact, 
                          unordered_map<string, string> *user_to_friend,unordered_map<int, string> cfd_to_user);
-bool handle_del_peer(json json_quest,unique_ptr<database>&db,unordered_map<string, string> *user_to_friend);
-bool handle_add_black(json json_quest,json *reflact,unique_ptr<database>&db);
-bool handle_rem_black(json json_quest,json *reflact,unique_ptr<database>&db);
+bool handle_del_peer(json json_quest,unique_ptr<database>&db,unordered_map<string, string>* user_to_friend);
+bool handle_add_black(json json_quest,json *reflact,unique_ptr<database>&db,
+                      unordered_map<string,int> user_to_cfd,unordered_map<string,string>* user_to_friend);
+bool handle_rem_black(json json_quest,json *reflact,unique_ptr<database>&db,unordered_map<string,int> user_to_cfd);
 bool handle_check_friend(json json_quest,json *reflact,unique_ptr<database>&db,
                          unordered_map<int, string>* cfd_to_user);
 bool handle_del_friend(json json_quest,json *reflact,unique_ptr<database>&db,
-                       unordered_map<string,int> user_to_cfd);
+                       unordered_map<string,int> user_to_cfd,unordered_map<string,string>* user_to_friend);
 bool handle_add_file(json json_quest,json *reflact,unique_ptr<database>&db,
                      unordered_map<int, string> cfd_to_user,unordered_map<string,string>user_to_friend,
                      unordered_map<string, int> user_to_cfd,unordered_map<string,int> user_to_group);
@@ -60,8 +61,9 @@ bool handle_add_admin(json json_quest,json *reflact,unique_ptr<database>&db,unor
 bool handle_show_friend(json json_quest,json *reflact,unique_ptr<database>&db);
 bool handle_add_member(json json_quest,json *reflact,unique_ptr<database>&db,unordered_map<string,int> user_to_cfd);
 bool handle_break_group(json json_quest,json *reflact,unique_ptr<database>&db,
-                        unordered_map<string,int> user_to_cfd,unordered_map<string,int> user_to_group);
+                        unordered_map<string,int> user_to_cfd,unordered_map<string,int>* user_to_group);
 bool handle_kill_user(json json_quest,json *reflact,unique_ptr<database>&db,
-                      unordered_map<string,int> user_to_cfd,unordered_map<string,int> user_to_group);
-bool handle_del_group(json json_quest,json *reflact,unique_ptr<database>&db,unordered_map<string,int> user_to_cfd);
+                      unordered_map<string,int> user_to_cfd,unordered_map<string,int>* user_to_group);
+bool handle_del_group(json json_quest,json *reflact,unique_ptr<database>&db,
+                      unordered_map<string,int> user_to_cfd,unordered_map<string,int>* user_to_group);
 void select_new_owner_or_disband_group(const string& old_owner, unique_ptr<database>& db);

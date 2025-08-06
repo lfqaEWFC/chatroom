@@ -578,7 +578,7 @@ private:
                 char cur_path[MAXBUF];
                 char file_path[2*MAXBUF];
                 char file_new_name[LARGESIZE];
-                string file_name = new_args->file_path;
+                string file_name = new_args->file_path.substr(new_args->file_path.find_last_of("/") + 1);
 
                 dirp = opendir("download");
                 if(dirp == nullptr)
@@ -704,6 +704,7 @@ private:
                         json send_json = {
                             {"request",ADD_FILE},
                             {"filename",file_name},
+                            {"filepath",new_args->file_path},
                             {"sender",new_args->sender},
                             {"group_flag",false},
                             {"receiver",new_args->receiver}
@@ -715,6 +716,7 @@ private:
                         json send_json = {
                             {"request",ADD_FILE},
                             {"filename",file_name},
+                            {"filepath",new_args->file_path},
                             {"sender",new_args->sender},
                             {"group_flag",true},
                             {"receiver",new_args->receiver}
@@ -802,7 +804,7 @@ private:
                                 off_t file_size = file_stat.st_size;
                                 json send_json = {
                                     {"cmd", "STOR"},
-                                    {"filename", name},  
+                                    {"filepath",new_args->file_path->c_str()},  
                                     {"client_num", data_new_args->data_num},                                    
                                     {"sender", data_new_args->sender},
                                     {"receiver", data_new_args->receiver},
@@ -816,7 +818,7 @@ private:
                                 json send_json = {
                                     {"cmd","RETR"},
                                     {"client_num",data_new_args->data_num},
-                                    {"filename",new_args->file_path->c_str()},
+                                    {"filepath",new_args->file_path->c_str()},
                                     {"receiver",data_new_args->receiver.c_str()},
                                     {"sender",data_new_args->sender.c_str()}
                                 };
@@ -1016,6 +1018,7 @@ private:
                             else if (recvjson["request"] == DELETE_FRIEND)
                             {
                                 string reflact = recvjson["reflact"];
+                                if(*new_args->pri_chat_flag) *new_args->pri_chat_flag = false;
                                 cout << reflact << endl;
                             }
                             else if (recvjson["request"] == LIST_CMD)
@@ -1106,12 +1109,12 @@ private:
                                 if(get_flag)
                                 {
                                     if(!group_flag){
-                                        json filenames = recvjson["reflact"];
+                                        json filepaths = recvjson["reflact"];
                                         cout << "可接收文件如下: " << endl;
-                                        for (size_t i = 0; i <filenames.size(); i++)
+                                        for (size_t i = 0; i <filepaths.size(); i++)
                                         {
-                                            string name = filenames[i];
-                                            cout << "文件名称: " << name << endl;
+                                            string path = filepaths[i];
+                                            cout << "文件路径: " << path << endl;
                                         }
                                         *new_args->fri_username = recvjson["file_user"];
                                     }
@@ -1124,9 +1127,9 @@ private:
                                         {
                                             json msg = array[i];
                                             string sender = msg["sender"];
-                                            string filename = msg["filename"];
+                                            string filepath = msg["filepath"];
                                             cout << "发送者：" << sender;
-                                            cout << "   文件名称：" << filename << endl;
+                                            cout << "   文件路径：" << filepath << endl;
                                         }
                                         *new_args->group_id = gid;
                                     }
@@ -1281,13 +1284,19 @@ private:
                             else if(recvjson["request"] == SHOW_FRIEND){
                                 json members = json::array();
                                 members = recvjson["members"];
-                                cout << "=============================================" << endl;
-                                for(int i=0; i<members.size();i++)
+                                if(members.size() == 0)
+                                    cout << "您当前暂未添加任何好友..." << endl;
+                                else
                                 {
-                                    string username = members[i];
-                                    cout << "好友：" << username << endl;
+                                    cout << "=============================================" << endl;
+                                    for(int i=0; i<members.size();i++)
+                                    {
+                                        string username = members[i];
+                                        cout << "好友：" << username << endl;
+                                    }
+                                    cout << "=============================================" << endl;
                                 }
-                                cout << "=============================================" << endl;
+
                             }
                             else if(recvjson["request"] == ADD_GROUP_MEM){
                                 string reflact = recvjson["reflact"];
@@ -1342,8 +1351,7 @@ private:
                             }
                             else if (recvjson["request"] == ADD_BLACKLIST)
                             {
-                                string reflact;
-                                *new_args->pri_chat_flag = false;
+                                string reflact = recvjson["reflact"];
                                 cout << "\r\033[K" << flush;
                                 cout << reflact << endl;
                                 if((!(*new_args->pri_chat_flag) && !(*new_args->group_flag)) ||
@@ -1359,6 +1367,7 @@ private:
                                     if(*new_args->group_flag)
                                         cout << *new_args->group_show << flush;
                                 }
+                                *new_args->pri_chat_flag = false;
                             }
                             else if (recvjson["request"] == GET_OFFLINE_MSG)
                             {
