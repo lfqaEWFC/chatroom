@@ -261,7 +261,9 @@ void handle_pri_chat(string username,string fri_user,int cfd,int FTP_ctrl_cfd,bo
     cout << "提示：\n"
         << "- 输入普通消息将直接发送。\n"
         << "- 输入 /exit 可退出私聊。\n" 
-        << "- 输入 /file 可传输文件。\n" << endl;
+        << "- 输入 /file 可传输文件。\n";
+    cout << "注意: 最多可以发送 4096 个字节的长文本" << endl;
+    cout << endl;
         
     *pri_show = "["+username+"->"+fri_user+"]: ";
 
@@ -285,8 +287,7 @@ void handle_pri_chat(string username,string fri_user,int cfd,int FTP_ctrl_cfd,bo
             cout << "提示：\n"
                 << "- 输入 EXIT 退出文件传输模式。\n"
                 << "- 输入 LIST + 路径名 将列出目录。\n"
-                << "- 输入 STOR + 文件路径 可传输文件。\n"
-                << "- 当前尚不支持文件名有特殊字符的文件传输\n" << endl;
+                << "- 输入 STOR + 文件路径 可传输文件。\n" << endl;
 
             while (true && !(*end_flag) && *pri_flag){
                 if(*end_flag || !(*pri_flag)) break;
@@ -891,6 +892,7 @@ void handle_group_chat(int cfd,string username,string group_role,long group_id,
         cout << "- 输入 /kill 可退出移除用户。\n";
     if(group_role == "admin" || group_role == "member")
         cout << "- 输入 /delete 可退出群聊。 \n";
+    cout << "注意: 最多可以发送 4096 个字节的长文本" << endl;
     cout << endl;
 
     *group_show = "[ "+group_name+" ] "+username+": ";
@@ -928,8 +930,7 @@ void handle_group_chat(int cfd,string username,string group_role,long group_id,
             cout << "提示：\n"
                 << "- 输入 EXIT 退出文件传输模式。\n"
                 << "- 输入 LIST + 路径名 将列出目录。\n"
-                << "- 输入 STOR + 文件路径 可传输文件。\n"
-                << "- 当前尚不支持文件名有特殊字符的文件传输\n" << endl;
+                << "- 输入 STOR + 文件路径 可传输文件。\n" << endl;
 
             while (true && !end_flag && *group_flag){
                 if(end_flag || !(*group_flag)) break;
