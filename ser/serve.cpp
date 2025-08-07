@@ -22,7 +22,9 @@ bool delete_from_filetmp(const string& filename)
 
 void select_new_owner_or_disband_group(const string& old_owner, unique_ptr<database>& db)
 {
-    MYSQL_RES* res = db->query_sql("SELECT group_id FROM `groups` WHERE owner_name ='"+old_owner+"'");
+    MYSQL_RES* res = db->query_sql(
+        "SELECT group_id FROM `groups` WHERE owner_name ='"+old_owner+"'"
+    );
     if (!res) return;
 
     MYSQL_ROW row;

@@ -430,6 +430,27 @@ class serve{
             
                             string json_str = buffer.substr(4, json_len);
 
+                            json msg_json;
+
+                            try {
+                                msg_json = json::parse(json_str);
+                            } catch (const std::exception& error) {
+                                cerr << "json parse error: " << error.what() << endl;
+                                buffer.erase(0, 4 + json_len);
+                                continue;
+                            }
+
+                            if (msg_json["request"] == PONG)
+                            {
+                                {
+                                    lock_guard<mutex> lock(pthargs->queue_mutex);
+                                    (*pthargs->cfd_to_timestamp)[evlist[i].data.fd] = time(nullptr);
+                                }
+                                cout << "Heartbeat received from cfd " << evlist[i].data.fd << endl;
+                                buffer.erase(0, 4 + json_len);
+                                continue;
+                            }
+
                             handle_recv_args *args = new handle_recv_args;
                             args->cfd = evlist[i].data.fd;
                             args->cfd_to_user = pthargs->cfd_to_user;
@@ -437,8 +458,7 @@ class serve{
                             args->user_to_friend = pthargs->user_to_friend;
                             args->user_to_group = pthargs->user_to_group;
                             args->cfd_to_timestamp = pthargs->cfd_to_timestamp;
-                            args->json_str = json_str;
-                    
+                            args->json_str = json_str;               
                             buffer.erase(0, 4 + json_len);
                             pthargs->handle_recv->addtask(handle_recv_func,args);
                         }
@@ -762,11 +782,6 @@ class serve{
                         sendjson(*reflact,new_args->cfd);
                     delete reflact;
                     break;
-                }
-                case(PONG):{
-                    time_t now = time(nullptr);
-                    (*new_args->cfd_to_timestamp)[new_args->cfd] = now;
-                    cout << "client - "+to_string(new_args->cfd)+" : pong" << endl;
                 }
             }
 

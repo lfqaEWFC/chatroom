@@ -89,9 +89,11 @@ public:
         epfd = epoll_create(EPSIZE);
         ev.data.fd = cfd;
         ev.events = EPOLLET | EPOLLRDHUP | EPOLLIN;
+        set_nonblocking(cfd);
         epoll_ctl(epfd, EPOLL_CTL_ADD, cfd, &ev);
         ev.data.fd = FTP_ctrl_cfd;
         ev.events = EPOLLET | EPOLLRDHUP | EPOLLIN;
+        set_nonblocking(FTP_ctrl_cfd);    
         epoll_ctl(epfd, EPOLL_CTL_ADD, FTP_ctrl_cfd, &ev);
 
         file_pool = new pool(CLIENT_FILE_NUM);
