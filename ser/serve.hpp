@@ -11,6 +11,7 @@
 using json = nlohmann::json;
 
 string get_current_mysql_timestamp();
+bool delete_from_filetmp(const string& filename);
 bool handle_signin(json json_quest, unique_ptr<database> &db);
 bool handle_login(json json_quest, unique_ptr<database> &db, json *reflact,
                   unordered_map<int, string> *cfd_to_user);
