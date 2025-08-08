@@ -6,15 +6,14 @@
 ##  项目结构
 
 ```
-chatroom-main/
-├── chat-system/
-│   ├── cli/             # 客户端代码
-│   ├── ser/             # 服务端主程序
-│   ├── include/            # 网络套接字封装 
-│   ├── define/             # 宏定义、常量配置
-│   ├── database/           # 数据库封装类（MySQL + Redis）
-│   ├── CMakeLists.txt      # 总工程 CMake 配置
-│   └── ...
+chatroom/
+├── cli/             # 客户端代码
+├── ser/             # 服务端主程序
+├── include/            # 网络套接字封装 
+├── define/             # 宏定义、常量配置
+├── database/           # 数据库封装类（MySQL + Redis）
+├── CMakeLists.txt      # 总工程 CMake 配置
+└── ...
 ```
 
 ##  技术栈
