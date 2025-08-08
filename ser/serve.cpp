@@ -45,10 +45,9 @@ void select_new_owner_or_disband_group(const string& old_owner, unique_ptr<datab
             db->execute_sql("UPDATE group_members SET role = 'owner' WHERE "
                             "group_id = "+gid+" AND username = '"+new_owner+"' AND status = 1");
         } 
-        else {
+        else 
             db->execute_sql("DELETE FROM `groups` WHERE group_id = " + gid);
-            db->execRedis("DEL group_message:" + gid);
-        }
+
         db->free_result(res2);
     }
 
@@ -708,6 +707,7 @@ bool handle_get_offline(json json_quest, unique_ptr<database> &db, json *reflact
     }
     if (reply) freeReplyObject(reply);
 
+    string logout_time = "1970-01-01 00:00:00";
     reply = db->execRedis("HGET " + time_key + " " + user);
     if (reply && reply->type == REDIS_REPLY_ERROR) {
         string err = reply->str;
@@ -718,11 +718,8 @@ bool handle_get_offline(json json_quest, unique_ptr<database> &db, json *reflact
         freeReplyObject(reply);
         return true;
     }
-    string logout_time;
     if (reply && reply->type == REDIS_REPLY_STRING) {
         logout_time = reply->str;
-    } else {
-        logout_time = "1970-01-01 00:00:00";
     }
     if (reply) freeReplyObject(reply);
 
@@ -735,36 +732,28 @@ bool handle_get_offline(json json_quest, unique_ptr<database> &db, json *reflact
         return true;
     }
     MYSQL_ROW row;
-    while ((row = mysql_fetch_row(res)) != nullptr) {
+    while ((row = mysql_fetch_row(res)) != nullptr) 
+    {
+        long gid = atol(row[0]);
         int gid_offline_cnt = 0;
-        long gid = atoi(row[0]);
-        string redis_group_key = "group_message:" + to_string(gid);
-        redisReply *group_reply = db->execRedis("LRANGE " + redis_group_key + " 0 -1");
-        if (group_reply) {
-            for (size_t i = 0; i < group_reply->elements; ++i) {
-                try {
-                    json msg_json = json::parse(group_reply->element[i]->str);
-                    string timestamp = msg_json["timestamp"];
-                    if (timestamp > logout_time) {
-                        gid_offline_cnt++;
-                    }
-                } catch (...) {
-                    cerr << "JSON parse error in group_message:" << gid << endl;
-                }
-            }
-        }
-        db->free_reply(group_reply);
+
         MYSQL_RES* res1 = db->query_sql(
             "SELECT COUNT(*) FROM group_message "
             "WHERE group_id=" + to_string(gid) + " "
             "AND created_at > '" + logout_time + "' "
         );
         if (res1 == nullptr) {
-            *reflact = {{"sort", "ERROR"}, {"reflact", "MySQL 查询用户所在群消息失败"}};
+            *reflact = {
+                {"sort", "ERROR"}, 
+                {"reflact", "MySQL 查询用户所在群消息失败"}
+            };
+            db->free_result(res);
             return true;
         }
         MYSQL_ROW row1 = mysql_fetch_row(res1);
-        gid_offline_cnt += atoi(row1[0]);
+        gid_offline_cnt = atoi(row1[0]);
+        db->free_result(res1);
+
         if (gid_offline_cnt > 0) {
             string line = "gid 为 " + to_string(gid) + " 的群组有 " + to_string(gid_offline_cnt) + " 条新消息";
             arr.push_back(line);
@@ -800,17 +789,15 @@ bool handle_get_offline(json json_quest, unique_ptr<database> &db, json *reflact
         };
         return true;
     }
-
     if (reply->type == REDIS_REPLY_ERROR) {
         string err = reply->str;
         *reflact = {
             {"sort", ERROR},
             {"reflact", "Redis 错误: " + err}
         };
-        if (reply) freeReplyObject(reply);
+        freeReplyObject(reply);
         return true;
     }
-
     if (reply->type == REDIS_REPLY_ARRAY) {
         for (size_t i = 0; i < reply->elements; ++i) {
             json req = json::parse(reply->element[i]->str);
@@ -1823,20 +1810,17 @@ bool handle_add_file(json json_quest,json *reflact,unique_ptr<database>&db,
             else if(reply->type == REDIS_REPLY_INTEGER){
                 if(reply->integer == 1){
                     freeReplyObject(reply);
-                    cout << "increasing..." << endl;
                     reply = db->execRedis("HINCRBY "+redis_key+" "+sender+" 1");
                     if(reply == nullptr) redis_chk = false;
                 }
                 else{
                     freeReplyObject(reply);
-                    cout << "setting..." << endl;
                     reply = db->execRedis("HSET "+redis_key+" "+sender+" 1");
                     if(reply == nullptr) redis_chk = false;
                 }
             }
             else{
                 freeReplyObject(reply);
-                cout << "redis reply type is wrong" << endl;
                 *reflact = {
                     {"sort",ERROR}, 
                     {"reflact","redis reply type is wrong"}
@@ -1845,7 +1829,6 @@ bool handle_add_file(json json_quest,json *reflact,unique_ptr<database>&db,
             }
             if(!redis_chk){
                 freeReplyObject(reply);
-                cout << "redis hash wrong" << endl;
                 *reflact = {
                     {"sort",ERROR}, 
                     {"reflact","redis hash wrong"}
@@ -1872,7 +1855,6 @@ bool handle_add_file(json json_quest,json *reflact,unique_ptr<database>&db,
         string gid = safe_receiver.substr(5);
         MYSQL_RES *res = db->query_sql("SELECT * FROM group_members WHERE "
             "group_id = "+gid+" AND username = '"+safe_sender+"' AND status = 1");
-        uint64_t rows = mysql_num_rows(res);
         if(res == nullptr)
         {
             cout << "SELECT failed" << endl;
@@ -1882,6 +1864,7 @@ bool handle_add_file(json json_quest,json *reflact,unique_ptr<database>&db,
             };
             return true; 
         }
+        uint64_t rows = mysql_num_rows(res);
         if(rows <= 0)
         {
             *reflact = {
@@ -1999,17 +1982,21 @@ bool handle_add_file(json json_quest,json *reflact,unique_ptr<database>&db,
             }
         }
         db->free_result(res);
-        json redis_msg = {
-            {"group_id",gid},
-            {"sender",sender},
-            {"timestamp",get_current_mysql_timestamp()},
-            {"content",""+sender+" 发送了一个文件"} 
-        };
-        execchk = db->lpushJson("group_message:"+gid+"",redis_msg);
-        if(execchk == false){
+
+        string safe_gid = db->escape_mysql_string_full(gid);
+        string safe_sender_escaped = db->escape_mysql_string_full(sender);
+        string content = sender + " 发送了一个文件";
+        string safe_content = db->escape_mysql_string_full(content);
+
+        bool insert_msg_chk = db->execute_sql(
+            "INSERT INTO group_message (group_id, username, message) VALUES ("
+            + safe_gid + ", '" + safe_sender_escaped + "', '" + safe_content + "')"
+        );
+        if (!insert_msg_chk) {
+            cout << "INSERT group_message failed" << endl;
             *reflact = {
-                {"sort",ERROR}, 
-                {"reflact","redis lpush json error"}
+                {"sort", ERROR},
+                {"reflact", "MYSQL INSERT group_message ERROR"}
             };
             return true;
         }
@@ -2022,7 +2009,6 @@ bool handle_add_file(json json_quest,json *reflact,unique_ptr<database>&db,
     };
 
     return true;
-
 }
 
 bool handle_show_file(json json_quest,json *reflact,unique_ptr<database>&db){
@@ -2861,17 +2847,14 @@ bool handle_group_name(json json_quest,json* reflact,unique_ptr<database>&db,
 bool handle_group_history(json json_quest,json* reflact,unique_ptr<database>&db)
 {
     string username = db->escape_mysql_string_full(json_quest["username"]);
-    int redis_cnt = 0;
     int mysql_cnt = 50;
     long gid = json_quest["gid"];
     bool create_chk;
     MYSQL_ROW row;
     MYSQL_RES* res;
     uint64_t rows;
-    redisReply *reply;
-    string redis_key;
     json history_msgs = json::array();
-    
+
     res = db->query_sql("SHOW TABLES LIKE 'group_message'");
     if(res == nullptr)
     {
@@ -2913,88 +2896,44 @@ bool handle_group_history(json json_quest,json* reflact,unique_ptr<database>&db)
             return true;
         }
     }
-    redis_key = "group_message:"+to_string(gid);
-    reply = db->execRedis("LRANGE "+redis_key+" 0 49");
-    if(reply == nullptr)
+
+    db->free_result(res);
+
+    string sql = "SELECT username, message, created_at "
+                 "FROM group_message "
+                 "WHERE group_id = '" + to_string(gid) + "' "
+                 "ORDER BY created_at DESC "
+                 "LIMIT "+to_string(mysql_cnt)+"";
+    res = db->query_sql(sql);
+    if(res == nullptr)
     {
         *reflact = {
             {"sort",ERROR},
-            {"reflact","redis LRANGE reply is nullptr"}
+            {"reflact","MYSQL SELECT ERROR..."}
         };
         return true;
     }
-    else if(reply->type == REDIS_REPLY_ERROR)
+
+    rows = mysql_num_rows(res);
+    if(rows <= 0)
     {
         *reflact = {
-            {"sort",ERROR},
-            {"reflact","redis LRANGE reply error"}
+            {"sort",REFLACT},
+            {"request",GROUP_HISTORY},
+            {"his_flag",false},
+            {"reflact","当前暂无历史消息..."}
         };
-        db->free_reply(reply);
-        return true;
-    }
-    else if(reply->type == REDIS_REPLY_ARRAY)
-    {
-        for(int i=0;i<reply->elements;++i)
-        {
-            const char* msg_str = reply->element[i]->str;
-            try {
-                json msg_json = json::parse(msg_str);
-                history_msgs.push_back(msg_json);
-                redis_cnt++;
-            } catch (...) {
-                cerr << "[Redis] JSON parse error on message, skipping." << endl;
-            }
-        }
-    }
-    else
-    {
-        *reflact = {
-            {"sort",ERROR},
-            {"reflact","redis LRANGE reply's type error"}
-        };
-        db->free_reply(reply);
-        return true;
-    }
-    db->free_reply(reply);
-    cout << "redis_cnt: " << redis_cnt << endl;
-    mysql_cnt = mysql_cnt - redis_cnt;
-    if(mysql_cnt > 0)
-    {
-        string sql = "SELECT username, message, created_at "
-                     "FROM group_message "
-                     "WHERE group_id = '" + to_string(gid) + "' "
-                     "ORDER BY created_at DESC "
-                     "LIMIT "+to_string(mysql_cnt)+"";
         db->free_result(res);
-        res = db->query_sql(sql);
-        if(res == nullptr)
-        {
-            *reflact = {
-                {"sort",ERROR},
-                {"reflact","MYSQL SELECT ERROR..."}
-            };
-            return true;
-        }
-        rows = mysql_num_rows(res);
-        if(rows <= 0 && redis_cnt <= 0)
-        {
-            *reflact = {
-                {"sort",REFLACT},
-                {"request",GROUP_HISTORY},
-                {"his_flag",false},
-                {"reflact","当前暂无历史消息..."}
-            };
-            db->free_result(res);
-            return true;
-        }
-        while(((row = mysql_fetch_row(res)) != nullptr) && rows > 0 )
-        {  
-            json msg;
-            msg["sender"] = row[0];
-            msg["content"] = row[1];
-            msg["timestamp"] = row[2];
-            history_msgs.push_back(msg);
-        }
+        return true;
+    }
+
+    while((row = mysql_fetch_row(res)) != nullptr)
+    {  
+        json msg;
+        msg["sender"] = row[0];
+        msg["content"] = row[1];
+        msg["timestamp"] = row[2];
+        history_msgs.push_back(msg);
     }
 
     *reflact = {
@@ -3007,158 +2946,74 @@ bool handle_group_history(json json_quest,json* reflact,unique_ptr<database>&db)
     return true;
 }
 
-bool handle_group_chat(json json_quest,json* reflact,unique_ptr<database>&db,
-                       unordered_map<string, int> user_to_cfd,unordered_map<string,int> user_to_group)
+
+bool handle_group_chat(json json_quest, json* reflact, unique_ptr<database>& db,
+                       unordered_map<string, int> user_to_cfd, unordered_map<string, int> user_to_group)
 {
     string message = json_quest["message"];
     string username = json_quest["username"];
-    string safe_message = db->escape_mysql_string_full(json_quest["message"]);
-    string safe_username = db->escape_mysql_string_full(json_quest["username"]);
+    string safe_message = db->escape_mysql_string_full(message);
+    string safe_username = db->escape_mysql_string_full(username);
     long gid = json_quest["gid"];
-    json redis_msg;
-    long redis_len = 0;
-    bool redis_ok = true;
-    redisReply *reply;
-    MYSQL_RES* res;
-    uint64_t rows;
-    MYSQL_ROW row;
-    string redis_key = "group_message:"+to_string(gid);
 
-    redis_msg = {
-        {"group_id",gid},
-        {"sender",username},
-        {"timestamp",get_current_mysql_timestamp()},
-        {"content",message}
-    };
-    redis_ok = db->lpushJson(redis_key,redis_msg);
-    if(redis_ok == false)
+    string sql = "INSERT INTO group_message (group_id, username, message, created_at) VALUES (";
+    sql += to_string(gid) + 
+        ", '" + safe_username + "', '" + safe_message + "', '" + get_current_mysql_timestamp() + "');";
+
+    bool insert_ok = db->execute_sql(sql);
+    if (!insert_ok)
     {
         *reflact = {
-            {"sort",ERROR},
-            {"reflact","redis 群聊消息写入错误..."}
+            {"sort", ERROR},
+            {"reflact", "MySQL 插入群消息失败"}
         };
         return true;
     }
-    reply = db->execRedis("LLEN "+redis_key+"");
-    if(reply == nullptr)
+
+    MYSQL_RES* res = db->query_sql(
+        "SELECT username FROM group_members "
+        "WHERE group_id = " + to_string(gid) + " "
+        "AND username <> '" + safe_username + "' "
+        "AND status != 0;"
+    );
+    if (res == nullptr)
     {
         *reflact = {
-            {"sort",ERROR},
-            {"reflact","redis LRANGE reply is nullptr"}
+            {"sort", ERROR},
+            {"reflact", "MySQL 查询群成员失败"}
         };
         return true;
     }
-    if(reply->type == REDIS_REPLY_INTEGER)
-        redis_len = reply->integer;
-    else
-    {
-        *reflact = {
-            {"sort",ERROR},
-            {"reflact","redis llen type error"}
-        };
-        db->free_reply(reply);
-        return true;
-    }
-    db->free_reply(reply);
-    if (redis_len >= 1000)
-    {
-        reply = db->execRedis("LPOP " + redis_key + " 1000");
-        if (reply == nullptr || reply->type != REDIS_REPLY_ARRAY)
-        {
-            *reflact = {
-                {"sort", ERROR},
-                {"reflact", "redis LPOP reply error or nullptr"}
-            };
-            if (reply) db->free_reply(reply);
-            return true;
-        }
-    
-        string sql = "INSERT INTO group_message (group_id, username, message, created_at) VALUES ";
-        for (size_t i = 0; i < reply->elements; ++i)
-        {
-            try
-            {
-                json msg_json = json::parse(reply->element[i]->str);
-                string group_id_str = to_string(msg_json["group_id"].get<long>());
-                string username_str = db->escape_mysql_string_full(msg_json["sender"].get<string>());
-                string message_str = db->escape_mysql_string_full(msg_json["content"].get<string>());
-                string created_at_str = db->escape_mysql_string_full(msg_json["timestamp"].get<string>());
-    
-                sql += "(" + group_id_str + ", '" + username_str + "', '" 
-                        + message_str + "', '" + created_at_str + "')";
-                if (i != reply->elements - 1)
-                    sql += ",";
-            }
-            catch (...)
-            {
-                cerr << "[Redis] JSON parse error during batch insert, skipping." << endl;
-            }
-        }
-        sql += ";";
-    
-        db->free_reply(reply);
-    
-        bool insert_ok = db->execute_sql(sql);
-        if (!insert_ok)
-        {
-            *reflact = {
-                {"sort", ERROR},
-                {"reflact", "MySQL 批量插入群消息失败"}
-            };
-            return true;
-        }
-    }
-    res = db->query_sql("SELECT username FROM group_members "
-                        "WHERE group_id = "+to_string(gid)+" "                       
-                        "AND username <> '"+safe_username+"' "
-                        "AND status != 0;");
-    if(res == nullptr)
-    {
-        *reflact = {
-            {"sort",ERROR},
-            {"reflact","MYSQL SELECT username ERROR..."}
-        };
-        return true;
-    }
-    while((row = mysql_fetch_row(res)) != nullptr)
+
+    MYSQL_ROW row;
+    while ((row = mysql_fetch_row(res)) != nullptr)
     {
         string receiver = row[0];
         auto it = user_to_cfd.find(receiver);
-        int cfd = 0;
-        if (it != user_to_cfd.end())
-            cfd = user_to_cfd[receiver];
-        if(cfd == 0)
+        int cfd = (it != user_to_cfd.end()) ? it->second : 0;
+        if (cfd == 0)
             continue;
-        else 
-        {
-            auto it_group = user_to_group.find(receiver);
-            json send_json;
-            if(it_group == user_to_group.end())
-            {
-                send_json = {
-                    {"sort",MESSAGE},
-                    {"request",NOT_PEER_GROUP},
-                    {"message","通知: gid为 "+to_string(gid)+" 的群组有一条新消息"}
-                };
-            } else {
 
-                if(it_group->second == gid){
-                    send_json = {
-                        {"sort",MESSAGE},
-                        {"request",PEER_GROUP},
-                        {"sender",json_quest["username"]},
-                        {"message",message}
-                    };
-                } else{
-                    send_json = {
-                        {"sort",MESSAGE},
-                        {"request",NOT_PEER_GROUP},
-                        {"message","通知: gid为 "+to_string(gid)+" 的群组有一条新消息"}
-                    };
-                }
-            }
-            sendjson(send_json,cfd);
+        json send_json;
+        auto it_group = user_to_group.find(receiver);
+        if (it_group == user_to_group.end() || it_group->second != gid)
+        {
+            send_json = {
+                {"sort", MESSAGE},
+                {"request", NOT_PEER_GROUP},
+                {"message", "通知: gid为 " + to_string(gid) + " 的群组有一条新消息"}
+            };
         }
+        else
+        {
+            send_json = {
+                {"sort", MESSAGE},
+                {"request", PEER_GROUP},
+                {"sender", username},
+                {"message", message}
+            };
+        }
+        sendjson(send_json, cfd);
     }
 
     db->free_result(res);
@@ -3464,7 +3319,6 @@ bool handle_break_group(json json_quest, json* reflact, unique_ptr<database>& db
     MYSQL_RES* res;
     MYSQL_ROW row;
     long gid = json_quest["gid"];
-    string redis_key = "group_message:"+to_string(gid);
     string safe_gid = to_string(gid);
     string username = json_quest["username"];
 
@@ -3564,15 +3418,7 @@ bool handle_break_group(json json_quest, json* reflact, unique_ptr<database>& db
         };
         return true;
     }
-    execchk = db->execRedis("DEL " + redis_key);
-    if(execchk == false)
-    {
-        *reflact = {
-            {"sort",ERROR},
-            {"reflact","redis 缓存清除出错..."}
-        };
-        return true;
-    }
+    
     *reflact = { 
         {"sort", REFLACT},
         {"request",BREAK_GROUP}, 
@@ -3742,7 +3588,8 @@ bool handle_del_group(json json_quest, json* reflact, unique_ptr<database>& db,
     string safe_gid = to_string(gid);
     string safe_username = db->escape_mysql_string_full(json_quest["username"]);
 
-    string sql = "DELETE FROM group_members WHERE group_id = "+safe_gid+" AND username = '"+safe_username+"'";
+    string sql = "DELETE FROM group_members WHERE "
+                "group_id = "+safe_gid+" AND username = '"+safe_username+"'";
     bool execchk = db->execute_sql(sql);
     if (!execchk) {
         *reflact = { 
