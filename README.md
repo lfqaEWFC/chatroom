@@ -1,5 +1,5 @@
 
-#  Chatroom System (C++ | Epoll | MySQL | Redis)
+#  Chatroom (C++ | Epoll | MySQL | Redis)
 
 一个高性能聊天室系统，支持多客户端并发通信、好友管理、群组聊天、文件通知传输、离线消息等功能。
 
