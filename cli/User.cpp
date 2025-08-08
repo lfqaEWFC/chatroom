@@ -391,7 +391,7 @@ void handle_pri_chat(string username,string fri_user,int cfd,int FTP_ctrl_cfd,bo
     return;
 }
 
-void handle_black(string username,int cfd,bool end_flag,pthread_cond_t* cond,pthread_mutex_t* mutex) {
+void handle_black(string username,int cfd,bool& end_flag,pthread_cond_t* cond,pthread_mutex_t* mutex) {
 
     char* input;
     json blacklist;
@@ -526,7 +526,7 @@ int handle_pasv(string reflact)
     return data_cfd;
 }
 
-void handle_show_file(string username, int cfd,bool endflag,
+void handle_show_file(string username, int cfd,bool& endflag,
                       pthread_cond_t* cond,pthread_mutex_t* mutex,
                       bool* pri_chat_flag,bool* group_flag)
 {
@@ -604,8 +604,8 @@ void handle_show_file(string username, int cfd,bool endflag,
     return;
 }
 
-void handle_retr_file(int FTP_ctrl_cfd,bool endflag,pthread_mutex_t* mutex,string* fri_username,
-                      pthread_cond_t* cond,bool* FTP_retr_flag,string* file_path,bool group_flag)
+void handle_retr_file(int FTP_ctrl_cfd,bool& endflag,pthread_mutex_t* mutex,string* fri_username,
+                      pthread_cond_t* cond,bool* FTP_retr_flag,string* file_path,bool& group_flag)
 {
     int cfd = FTP_ctrl_cfd;
     char fileshow[MSGBUF];
@@ -717,7 +717,7 @@ void handle_create_group(string username,int cfd,bool& create_wait)
     return;
 }
 
-void handle_add_group(string username,int cfd,bool end_flag,bool* id_flag,
+void handle_add_group(string username,int cfd,bool& end_flag,bool* id_flag,
                           pthread_cond_t* cond,pthread_mutex_t* mutex)
 {
     char *input;
@@ -752,7 +752,7 @@ void handle_add_group(string username,int cfd,bool end_flag,bool* id_flag,
     return;
 }
 
-void deal_add_group(int cfd,string username,bool endflag,bool* group_add_flag,
+void deal_add_group(int cfd,string username,bool& endflag,bool* group_add_flag,
                     pthread_cond_t* cond,pthread_mutex_t* mutex)
 {
     json send_json;
@@ -872,7 +872,7 @@ void handle_history_group(int cfd,string username,long group_id)
 }
 
 void handle_group_chat(int cfd,string username,string group_role,long group_id,
-                       string group_name,bool end_flag,string* group_show,
+                       string group_name,bool *end_flag,string* group_show,
                        pthread_cond_t *cond,pthread_mutex_t *mutex,string* file_path,
                        int FTP_ctrl_cfd,bool* FTP_stor_flag,bool* group_flag)
 {
@@ -897,7 +897,7 @@ void handle_group_chat(int cfd,string username,string group_role,long group_id,
 
     *group_show = "[ "+group_name+" ] "+username+": ";
     
-    while(true && !end_flag && *group_flag)
+    while(true && !(*end_flag) && *group_flag)
     {
         json send_json;
         string message;
@@ -906,7 +906,7 @@ void handle_group_chat(int cfd,string username,string group_role,long group_id,
         sprintf(show,"[ %s ] %s: ",group_name.c_str(),username.c_str());
         cout << show;        
         getline(cin,message); 
-        if(end_flag || !(*group_flag)) break;
+        if(*end_flag || !(*group_flag)) break;
         
         if(message == "/exit")
         {
@@ -916,12 +916,11 @@ void handle_group_chat(int cfd,string username,string group_role,long group_id,
               {"gid",group_id}  
             };
             sendjson(send_json,cfd);
-            handle_pthread_wait(end_flag,cond,mutex);
+            handle_pthread_wait(*end_flag,cond,mutex);
             break;
         }
-        else if(message == "/file" && !end_flag && *group_flag)
+        else if(message == "/file" && !(*end_flag) && *group_flag)
         {
-            cout << endl;
             char file_show[MAX_REASONABLE_SIZE];
             strcpy(file_show,"请输入命令：");
             *group_show = "请输入命令：";
@@ -930,13 +929,13 @@ void handle_group_chat(int cfd,string username,string group_role,long group_id,
             cout << "提示：\n"
                 << "- 输入 EXIT 退出文件传输模式。\n"
                 << "- 输入 LIST + 路径名 将列出目录。\n"
-                << "- 输入 STOR + 文件路径 可传输文件。\n" << endl;
+                << "- 输入 STOR + 文件路径 可传输文件。\n";
 
-            while (true && !end_flag && *group_flag){
-                if(end_flag || !(*group_flag)) break;
+            while (true && !(*end_flag) && *group_flag){
+                if(*end_flag || !(*group_flag)) break;
 
                 char *file_input = readline(file_show);
-                if(strstr(file_input,"LIST") && !end_flag && *group_flag){
+                if(strstr(file_input,"LIST") && !(*end_flag) && *group_flag){
                     char *cmd = NULL;
                     char *path = NULL;
                     char *saveptr = NULL;
@@ -959,9 +958,9 @@ void handle_group_chat(int cfd,string username,string group_role,long group_id,
                         };
                     }
                     sendjson(send_json,FTP_ctrl_cfd);
-                    handle_pthread_wait(end_flag,cond,mutex);
+                    handle_pthread_wait(*end_flag,cond,mutex);
                 }
-                else if(strstr(file_input,"STOR") && !end_flag && *group_flag){                    
+                else if(strstr(file_input,"STOR") && !(*end_flag) && *group_flag){                    
                     string input_str(file_input);
                     size_t pos = input_str.find(' ');
                     string filepath;
@@ -990,16 +989,15 @@ void handle_group_chat(int cfd,string username,string group_role,long group_id,
                     };
                     sendjson(send_json,FTP_ctrl_cfd);
                     *file_path = filepath;
-                    handle_pthread_wait(end_flag,cond,mutex);
+                    handle_pthread_wait(*end_flag,cond,mutex);
                 } 
                 else if(strcmp(file_input,"EXIT") == 0){
                     cout << "退出文件传输模式..." << endl;
-                    cout << endl;
                     *group_show = "[ "+group_name+" ] "+username+": ";
                     break;
                 }
                 else{
-                    if(end_flag || !*group_flag)
+                    if(*end_flag || !*group_flag)
                         cout << "您无法在这个群聊中发送文件..." << endl;
                     else
                         cout << "命令错误，请重新输入命令..." << endl;
@@ -1009,7 +1007,7 @@ void handle_group_chat(int cfd,string username,string group_role,long group_id,
             }
             continue;
         }
-        else if(message == "/admin" && !end_flag && *group_flag)
+        else if(message == "/admin" && !(*end_flag) && *group_flag)
         {   
             char *admin;
             char show[MSGBUF];
@@ -1022,7 +1020,7 @@ void handle_group_chat(int cfd,string username,string group_role,long group_id,
             } else
             {
                 show_group_members(cfd,username,group_id);
-                handle_pthread_wait(end_flag,cond,mutex);
+                handle_pthread_wait(*end_flag,cond,mutex);
                 strcpy(show,"请输入成员名称：");
                 admin = readline(show);
                 send_json = {
@@ -1034,17 +1032,17 @@ void handle_group_chat(int cfd,string username,string group_role,long group_id,
                 sendjson(send_json,cfd);
                 free(admin);
             }
-            handle_pthread_wait(end_flag,cond,mutex);
+            handle_pthread_wait(*end_flag,cond,mutex);
             continue;
         }
-        else if(message == "/add" && !end_flag && *group_flag)
+        else if(message == "/add" && !(*end_flag) && *group_flag)
         {
             char *admem;
             char show[MSGBUF];
             json send_json;
 
             show_user_friend(cfd,username);
-            handle_pthread_wait(end_flag,cond,mutex);
+            handle_pthread_wait(*end_flag,cond,mutex);
             strcpy(show,"请输入需要邀请的用户：");
             admem = readline(show);
             send_json = {
@@ -1054,11 +1052,11 @@ void handle_group_chat(int cfd,string username,string group_role,long group_id,
                 {"username",username}
             };
             sendjson(send_json,cfd);
-            handle_pthread_wait(end_flag,cond,mutex);
+            handle_pthread_wait(*end_flag,cond,mutex);
             free(admem);
             continue;
         }
-        else if(message == "/break" && !end_flag && *group_flag)
+        else if(message == "/break" && !(*end_flag) && *group_flag)
         {
             if(group_role != "owner")
             {
@@ -1073,10 +1071,10 @@ void handle_group_chat(int cfd,string username,string group_role,long group_id,
                 };
                 sendjson(send_json,cfd);
             }
-            handle_pthread_wait(end_flag,cond,mutex);
+            handle_pthread_wait(*end_flag,cond,mutex);
             break;
         }
-        else if(message == "/kill" && !end_flag && *group_flag)
+        else if(message == "/kill" && !(*end_flag) && *group_flag)
         {
             if(group_role == "member")
             {
@@ -1089,7 +1087,7 @@ void handle_group_chat(int cfd,string username,string group_role,long group_id,
                 json send_json;
 
                 show_group_members(cfd,username,group_id);
-                handle_pthread_wait(end_flag,cond,mutex);
+                handle_pthread_wait(*end_flag,cond,mutex);
                 strcpy(show,"请输入需要移除的用户：");
                 kill = readline(show);
                 send_json = {
@@ -1101,10 +1099,10 @@ void handle_group_chat(int cfd,string username,string group_role,long group_id,
                 sendjson(send_json,cfd);
                 free(kill);
             }
-            handle_pthread_wait(end_flag,cond,mutex);
+            handle_pthread_wait(*end_flag,cond,mutex);
             continue;
         }
-        else if(message == "/delete" && !end_flag && *group_flag)
+        else if(message == "/delete" && !(*end_flag) && *group_flag)
         {
             if(group_role == "owner")
             {
@@ -1117,10 +1115,10 @@ void handle_group_chat(int cfd,string username,string group_role,long group_id,
                 {"gid",group_id}
             };
             sendjson(send_json,cfd);
-            handle_pthread_wait(end_flag,cond,mutex);
+            handle_pthread_wait(*end_flag,cond,mutex);
             break;
         }
-        if(!end_flag && *group_flag)
+        if(!(*end_flag) && *group_flag)
         {
             send_json = {
                 {"request",GROUP_CHAT},

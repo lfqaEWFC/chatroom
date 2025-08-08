@@ -459,7 +459,7 @@ public:
                             handle_history_group(cfd,username,group_id);
                             handle_pthread_wait(end_flag, &recv_cond, &recv_lock);
                             handle_group_chat(cfd,username,group_role,group_id,
-                                              group_name,end_flag,&group_show,
+                                              group_name,&end_flag,&group_show,
                                               &recv_cond, &recv_lock, &file_path,
                                               FTP_ctrl_cfd,&FTP_data_stor_flag,&group_flag);
                             group_id = 0;
@@ -1072,7 +1072,7 @@ private:
                                     if(*new_args->pri_chat_flag)
                                         pool_file_args->receiver = *new_args->fri_username;
                                     if(*new_args->group_flag){
-                                        pool_file_args->receiver = to_string(*new_args->group_id);
+                                        pool_file_args->receiver = "(gid)"+to_string(*new_args->group_id);
                                         pool_file_args->group_flag = true;
                                     }
                                 }
@@ -1087,7 +1087,7 @@ private:
                                     }
                                     if(*new_args->group_flag){
                                         pool_file_args->sender = *new_args->fri_username;
-                                        pool_file_args->receiver = to_string(*new_args->group_id);
+                                        pool_file_args->receiver = "(gid)"+to_string(*new_args->group_id);
                                         pool_file_args->group_flag = true;
                                     }
                                 }

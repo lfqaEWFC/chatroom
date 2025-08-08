@@ -429,10 +429,11 @@ bool handle_break(json json_quest, unique_ptr<database> &db, json *reflact)
         string filepath = row[0];
         string sender = row[1];
         string group_id = row[2];
+        string receiver = "(gid)"+group_id;
         char load_filename[LARGESIZE];
 
         replace(filepath.begin(), filepath.end(), '/', '_');
-        sprintf(load_filename,"%s_to_%s-%s",sender.c_str(),group_id.c_str(),filepath.c_str());
+        sprintf(load_filename,"%s_to_%s-%s",sender.c_str(),receiver.c_str(),filepath.c_str());
         delete_from_filetmp(load_filename);
     }
     db->free_result(res);
@@ -1432,8 +1433,8 @@ bool handle_add_black(json json_quest, json *reflact, unique_ptr<database>& db,
     return true;
 }
 
-bool handle_rem_black(json json_quest,json *reflact,unique_ptr<database>&db,unordered_map<string,int> user_to_cfd){
-    
+bool handle_rem_black(json json_quest,json *reflact,unique_ptr<database>&db,unordered_map<string,int> user_to_cfd)
+{    
     int status;
     int per_status;
     string sql_update;
@@ -1868,7 +1869,7 @@ bool handle_add_file(json json_quest,json *reflact,unique_ptr<database>&db,
     }
     else
     {
-        string gid = safe_receiver;
+        string gid = safe_receiver.substr(5);
         MYSQL_RES *res = db->query_sql("SELECT * FROM group_members WHERE "
             "group_id = "+gid+" AND username = '"+safe_sender+"' AND status = 1");
         uint64_t rows = mysql_num_rows(res);
@@ -1940,7 +1941,7 @@ bool handle_add_file(json json_quest,json *reflact,unique_ptr<database>&db,
         if(execchk == false){
             *reflact = {
                 {"sort",MESSAGE},
-                {"request",ADD_FILE},
+                {"request",ADD_FILE},   
                 {"message","请勿上传重复的文件..."}
             };
             return true;
@@ -3545,10 +3546,11 @@ bool handle_break_group(json json_quest, json* reflact, unique_ptr<database>& db
         string filepath = row[0];
         string sender = row[1];
         string group_id = row[2];
+        string receiver = "(gid)"+group_id;
         char load_filename[LARGESIZE];
 
         replace(filepath.begin(), filepath.end(), '/', '_');
-        sprintf(load_filename,"%s_to_%s-%s",sender.c_str(),group_id.c_str(),filepath.c_str());
+        sprintf(load_filename,"%s_to_%s-%s",sender.c_str(),receiver.c_str(),filepath.c_str());
         delete_from_filetmp(load_filename);
     }
     db->free_result(res);
@@ -3591,6 +3593,7 @@ bool handle_kill_user(json json_quest, json* reflact, unique_ptr<database>& db,
     long gid = json_quest["gid"];
     string safe_gid = to_string(gid);
     string redis_key = "offline:system_notice:" + kill_user;
+    
     if(kill_user == username)
     {
         *reflact = { 
@@ -3667,10 +3670,11 @@ bool handle_kill_user(json json_quest, json* reflact, unique_ptr<database>& db,
         string filepath = row[0];
         string sender = row[1];
         string group_id = row[2];
+        string receiver = "(gid)"+group_id;
         char load_filename[LARGESIZE];
 
         replace(filepath.begin(), filepath.end(), '/', '_');
-        sprintf(load_filename,"%s_to_%s-%s",sender.c_str(),group_id.c_str(),filepath.c_str());
+        sprintf(load_filename,"%s_to_%s-%s",sender.c_str(),receiver.c_str(),filepath.c_str());
         delete_from_filetmp(load_filename);
     }
     db->free_result(res);
@@ -3774,10 +3778,11 @@ bool handle_del_group(json json_quest, json* reflact, unique_ptr<database>& db,
         string filepath = row[0];
         string sender = row[1];
         string group_id = row[2];
+        string receiver = "(gid)"+group_id;
         char load_filename[LARGESIZE];
 
         replace(filepath.begin(), filepath.end(), '/', '_');
-        sprintf(load_filename,"%s_to_%s-%s",sender.c_str(),group_id.c_str(),filepath.c_str());
+        sprintf(load_filename,"%s_to_%s-%s",sender.c_str(),receiver.c_str(),filepath.c_str());
         delete_from_filetmp(load_filename);
     }
     db->free_result(res);
