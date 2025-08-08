@@ -53,7 +53,7 @@ chatroom-main/
 ### 启动客户端
 
 ```bash
-./client
+./client 服务器ip
 ```
 
 客户端会自动连接服务端（默认 localhost，支持设置 IP 和端口）。
