@@ -89,11 +89,9 @@ public:
         epfd = epoll_create(EPSIZE);
         ev.data.fd = cfd;
         ev.events = EPOLLET | EPOLLRDHUP | EPOLLIN;
-        set_nonblocking(cfd);
         epoll_ctl(epfd, EPOLL_CTL_ADD, cfd, &ev);
         ev.data.fd = FTP_ctrl_cfd;
-        ev.events = EPOLLET | EPOLLRDHUP | EPOLLIN;
-        set_nonblocking(FTP_ctrl_cfd);    
+        ev.events = EPOLLET | EPOLLRDHUP | EPOLLIN;   
         epoll_ctl(epfd, EPOLL_CTL_ADD, FTP_ctrl_cfd, &ev);
 
         file_pool = new pool(CLIENT_FILE_NUM);
@@ -1319,9 +1317,9 @@ private:
                             else if(recvjson["request"] == PING){
                                 json send_json = {
                                     {"sort",REFLACT},
-                                    {"request",PONG}
+                                    {"cmd","PONG"}
                                 };
-                                sendjson(send_json,new_args->cfd);
+                                sendjson(send_json,new_args->FTP_ctrl_cfd);
                             }
                             else{
                                 cout << "错误的request,服务端可能出错..." <<endl;

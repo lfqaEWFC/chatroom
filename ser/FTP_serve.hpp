@@ -10,6 +10,7 @@
 #include<sys/stat.h>
 #include<sys/sendfile.h>
 #include<nlohmann/json.hpp>
+#include <time.h>
 
 using json = nlohmann::json;
 
@@ -46,7 +47,8 @@ typedef struct ctrl_args
     string json_str;
     ctrl_args *next = nullptr;
     data_args *data_args_list = nullptr;
-    unordered_map<int,data_args*>data_pairs; 
+    unordered_map<int,data_args*>data_pairs;
+    unordered_map<int,time_t>* cfd_to_heart; 
 }ctrl_args;
 
 
@@ -62,6 +64,7 @@ class FTP
     {
         ctrl_pool = new pool(control_threads);
         data_pool = new pool(data_threads);
+        pthread_create(&heart_pthread,nullptr,heart_beat_func,this);
     }
     
     void init(){
@@ -132,10 +135,38 @@ class FTP
     pool* data_pool;
     ssize_t control_threads;
     ssize_t data_threads;
+    pthread_t heart_pthread;
     data_args *data_args_list;
     ctrl_args *ctrl_args_list;
     struct epoll_event ev;
     struct epoll_event evlist[EPSIZE];
+    unordered_map<int,time_t> cfd_to_heart;
+
+    static void* heart_beat_func(void* args)
+    {
+        FTP* srv = static_cast<FTP*>(args);
+        cout << srv->running << endl;
+        while(srv->running)
+        {
+            auto it = srv->cfd_to_heart.begin();
+            for(;it != srv->cfd_to_heart.end();it++)
+            {
+                int cfd = it->first;
+                time_t now = time(nullptr);
+                time_t timestamp = it->second;
+                int time = now - timestamp;
+                if(time > 30)  
+                    close(cfd);
+                json send_json = {
+                    {"sort",REFLACT},
+                    {"request",PING}
+                };
+                sendjson(send_json,cfd);
+            }
+            sleep(10);
+        }
+        return nullptr;
+    }
 
     static int set_nonblocking(int fd) 
     {
@@ -406,11 +437,14 @@ class FTP
             close(listen_fd);
 
         }else{
+            cfd_to_heart[connect_fd] = time(nullptr);
+            cout << "Heartbeat received from cfd " << connect_fd << endl;
             if(ctrl_args_list == NULL){
                 ctrl_args_list = new ctrl_args;
                 ctrl_args_list->fd = connect_fd;
                 ctrl_args_list->epfd = epfd;
                 ctrl_args_list->data_pool = data_pool;
+                ctrl_args_list->cfd_to_heart = &cfd_to_heart;
                 ctrl_args_list->next = NULL;
                 sprintf(ctrl_args_list->clientnum,"%d",++client_num);
                 send(connect_fd,ctrl_args_list->clientnum,strlen(ctrl_args_list->clientnum),0);                
@@ -421,6 +455,7 @@ class FTP
                 ctrl_add->next = NULL;  
                 ctrl_add->epfd = epfd;
                 ctrl_add->data_pool = data_pool;
+                ctrl_add->cfd_to_heart = &cfd_to_heart;
                 sprintf(ctrl_add->clientnum,"%d",++client_num);
                 send(connect_fd,ctrl_add->clientnum,strlen(ctrl_add->clientnum),0);                
                 ctrl_tail = ctrl_args_list;
@@ -558,6 +593,12 @@ class FTP
                 
                 return NULL;
             }
+
+            if(recvjson["cmd"] == "PONG")
+            {
+                (*new_arg->cfd_to_heart)[new_arg->fd] = time(nullptr);
+                cout << "Heartbeat received from cfd " << new_arg->fd << endl;
+            }  
 
             if((recvjson["cmd"] == "RETR") || (recvjson["cmd"] == "STOR"))
             {
