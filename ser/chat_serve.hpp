@@ -433,6 +433,7 @@ class serve{
                                                 {"message",message}
                                             };
                                             sendjson(send_msg,cfd);
+                                            break;
                                         }
                                         else{
                                             json send_msg = {
@@ -440,7 +441,8 @@ class serve{
                                                 {"request",NON_PEER_CHAT},
                                                 {"message","通知: 好友"+sender+"向您发送了一条新消息"}
                                             };
-                                            sendjson(send_msg,cfd);;
+                                            sendjson(send_msg,cfd);
+                                            break;
                                         }
                                     }
                                 }
