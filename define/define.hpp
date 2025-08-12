@@ -65,4 +65,4 @@
 #define NOMSIZE 64
 #define LARGESIZE 512
 #define CLIENT_FILE_NUM 24
-#define HANDLE_RECV_NUM 96
+#define HANDLE_RECV_NUM 64

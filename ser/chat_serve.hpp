@@ -17,6 +17,7 @@ typedef struct reactargs{
     int cefd;
     int eventfd;
     pool *handle_recv;
+    pool *handle_message;
     pthread_t pthreact;
     queue<int> pending_fds;  
     mutex queue_mutex;
@@ -69,6 +70,7 @@ class serve{
             }
 
             handle_recv = new pool(HANDLE_RECV_NUM);
+            handle_message = new pool(HANDLE_RECV_NUM);
             reactarr = new reactargs[REACTSIZE];
 
             database db("localhost", 0, "root", nullptr, "chat_database", "localhost", 6379);
@@ -128,6 +130,7 @@ class serve{
         }
         
         delete handle_recv;
+        delete handle_message;
         delete[] reactarr;
     }
 
@@ -142,6 +145,7 @@ class serve{
                 reactarr[i].cnt = 0;
                 reactarr[i].eventfd = eventfd(0, EFD_NONBLOCK);
                 reactarr[i].handle_recv = handle_recv;
+                reactarr[i].handle_message = handle_message;
                 reactarr[i].cfd_to_user = &cfd_to_user;
                 reactarr[i].user_to_cfd = &user_to_cfd;
                 reactarr[i].cfd_to_buffer = &cfd_to_buffer;
@@ -405,6 +409,13 @@ class serve{
             
                             string json_str = buffer.substr(4, json_len);
                             handle_recv_args *args = new handle_recv_args;
+                            args->cfd = evlist[i].data.fd;
+                            args->cfd_to_user = pthargs->cfd_to_user;
+                            args->user_to_cfd = pthargs->user_to_cfd;
+                            args->user_to_friend = pthargs->user_to_friend;
+                            args->user_to_group = pthargs->user_to_group;
+                            args->json_str = json_str;               
+                            buffer.erase(0, 4 + json_len);
 
                             json json_quest;
                             try {
@@ -448,8 +459,9 @@ class serve{
                                 }
                                 if(it == (*pthargs->cfd_to_user).end())
                                     args->pri_redis_flag = true;
+                                pthargs->handle_message->addtask(handle_recv_func,args);
                             }
-                            if(json_quest["request"] == GROUP_CHAT)
+                            else if(json_quest["request"] == GROUP_CHAT)
                             {
                                 long gid = json_quest["gid"];
                                 string message = json_quest["message"];
@@ -510,16 +522,11 @@ class serve{
                                     sendjson(send_json, cfd);
                                 }
                                 db->free_result(res);
+                                pthargs->handle_message->addtask(handle_recv_func,args);
                             }
+                            else
+                                pthargs->handle_recv->addtask(handle_recv_func,args);
 
-                            args->cfd = evlist[i].data.fd;
-                            args->cfd_to_user = pthargs->cfd_to_user;
-                            args->user_to_cfd = pthargs->user_to_cfd;
-                            args->user_to_friend = pthargs->user_to_friend;
-                            args->user_to_group = pthargs->user_to_group;
-                            args->json_str = json_str;               
-                            buffer.erase(0, 4 + json_len);
-                            pthargs->handle_recv->addtask(handle_recv_func,args);
                         }
                     }
                 }
@@ -865,6 +872,7 @@ class serve{
         bool startflag;
         bool creatflag;
         pool *handle_recv;
+        pool *handle_message;
         reactargs *reactarr;
         uint64_t event_value;
         struct epoll_event lev;
