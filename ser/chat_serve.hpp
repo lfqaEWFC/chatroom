@@ -244,8 +244,10 @@ class serve{
                         epoll_ctl(pthargs->cefd, EPOLL_CTL_DEL, evlist[i].data.fd, nullptr);
                         {
                             lock_guard<mutex> lock(pthargs->queue_mutex);
-                            auto it = pthargs->cfd_to_user->find(evlist[i].data.fd);
-                            auto del_buffer = pthargs->cfd_to_buffer->find(evlist[i].data.fd);
+                            auto it = 
+                                pthargs->cfd_to_user->find(evlist[i].data.fd);
+                            auto del_buffer = 
+                                pthargs->cfd_to_buffer->find(evlist[i].data.fd);
                             static thread_local unique_ptr<database> db = nullptr;
                             if(del_buffer != pthargs->cfd_to_buffer->end())
                             {
@@ -277,8 +279,10 @@ class serve{
                                 }
                                 if (!db) 
                                 {
-                                    db = make_unique<database>("localhost", 0, "root", nullptr, 
-                                                               "chat_database", "localhost", 6379);
+                                    db = make_unique<database>(
+                                        "localhost", 0, "root", nullptr, 
+                                        "chat_database", "localhost", 6379
+                                    );
                                     if (!db->is_connected()) 
                                     {
                                         cerr << "React Redis DB connect error" << endl;
@@ -287,10 +291,15 @@ class serve{
                                 string redis_key = "offline:logout_time";
                                 redisContext *redis = db->get_redis_conn();
                                 string timestamp = get_current_mysql_timestamp();
-                                const char* argv[] = {"HSET", redis_key.c_str(), 
-                                                      username.c_str(), timestamp.c_str()};
-                                size_t argvlen[] = {4, redis_key.size(), username.size(), timestamp.size()};
-                                redisReply* reply = (redisReply*)redisCommandArgv(redis, 4, argv, argvlen);
+                                const char* argv[] = 
+                                    {"HSET", redis_key.c_str(), 
+                                    username.c_str(), timestamp.c_str()
+                                };
+                                size_t argvlen[] = 
+                                    {4, redis_key.size(), username.size(), timestamp.size()};
+                                redisReply* reply = (redisReply*)redisCommandArgv(
+                                    redis, 4, argv, argvlen
+                                );
                                 if(reply) freeReplyObject(reply);
                                 cout << "logout_time change" << endl;
                             }
@@ -347,22 +356,29 @@ class serve{
                                             string redis_key = "offline:logout_time";
                                             redisContext *redis = db->get_redis_conn();
                                             string timestamp = get_current_mysql_timestamp();
-                                            const char* argv[] = {"HSET", redis_key.c_str(), 
-                                                                  username.c_str(), timestamp.c_str()};
+                                            const char* argv[] = 
+                                            {
+                                                "HSET", redis_key.c_str(), 
+                                                username.c_str(), timestamp.c_str()
+                                            };
                                             size_t argvlen[] = {4, redis_key.size(), username.size(), 
                                                                 timestamp.size()};
-                                            redisReply* reply = (redisReply*)redisCommandArgv(redis, 4, 
-                                                                argv, argvlen);
+                                            redisReply* reply = (redisReply*)redisCommandArgv(
+                                                redis, 4, argv, argvlen
+                                            );
                                             if(reply)
                                                 freeReplyObject(reply);
                                             cout << "logout_time change" << endl;
-                                            auto it_fd = pthargs->user_to_cfd->find(username);
+                                            auto it_fd = 
+                                                pthargs->user_to_cfd->find(username);
                                             if(it_fd != pthargs->user_to_cfd->end())
                                                 pthargs->user_to_cfd->erase(it_fd);
-                                            auto it_name = pthargs->user_to_friend->find(username);
+                                            auto it_name = 
+                                                pthargs->user_to_friend->find(username);
                                             if(it_name != pthargs->user_to_friend->end())
                                                 pthargs->user_to_friend->erase(it_name);
-                                            auto it_id = pthargs->user_to_group->find(username);
+                                            auto it_id = 
+                                                pthargs->user_to_group->find(username);
                                             if(it_id != pthargs->user_to_group->end())
                                                 pthargs->user_to_group->erase(it_id);
                                             pthargs->cfd_to_user->erase(it);
@@ -665,7 +681,8 @@ class serve{
                 }
                 case(ADD_BLACKLIST):{
                     json *reflact = new json;
-                    if(handle_add_black(json_quest,reflact,db,*new_args->user_to_cfd,new_args->user_to_friend))
+                    if(handle_add_black(json_quest,reflact,db,
+                        *new_args->user_to_cfd,new_args->user_to_friend))
                         sendjson(*reflact,new_args->cfd);
                     delete reflact;
                     break;
