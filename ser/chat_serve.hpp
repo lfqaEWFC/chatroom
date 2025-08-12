@@ -536,7 +536,9 @@ class serve{
             static thread_local unique_ptr<database> db = nullptr;
 
             if (!db) {
-                db = make_unique<database>("localhost", 0, "root", nullptr, "chat_database", "localhost", 6379);
+                db = make_unique<database>(
+                    "localhost", 0, "root", nullptr, "chat_database", "localhost", 6379
+                );
                 if (!db->is_connected()) {
                     cerr << "Connect Database Error" << endl;
                     json send_json{
@@ -611,7 +613,8 @@ class serve{
                 }
                 case(LOGOUT):{
                     json *reflact = new json;
-                    handle_logout(json_quest,db,reflact,new_args->cfd_to_user,new_args->user_to_cfd);                         
+                    handle_logout(json_quest,db,reflact,
+                        new_args->cfd_to_user,new_args->user_to_cfd);                         
                     sendjson(*reflact,new_args->cfd);
                     delete reflact;
                     break;
@@ -703,15 +706,17 @@ class serve{
                 }
                 case(DELETE_FRIEND):{
                     json *reflact = new json;
-                    if(handle_del_friend(json_quest,reflact,db,*new_args->user_to_cfd,new_args->user_to_friend))
+                    if(handle_del_friend(json_quest,reflact,db,
+                        *new_args->user_to_cfd,new_args->user_to_friend))
                         sendjson(*reflact,new_args->cfd);
                     delete reflact;
                     break;
                 }
                 case(ADD_FILE):{
                     json *reflact = new json;
-                    if(handle_add_file(json_quest,reflact,db,*new_args->cfd_to_user,*new_args->user_to_friend,
-                                       *new_args->user_to_cfd,*new_args->user_to_group))
+                    if(handle_add_file(json_quest,reflact,db,
+                        *new_args->cfd_to_user,*new_args->user_to_friend,
+                        *new_args->user_to_cfd,*new_args->user_to_group))
                         sendjson(*reflact,new_args->cfd);
                     delete reflact;
                     break;
@@ -781,7 +786,8 @@ class serve{
                 } 
                 case(GROUP_CHAT):{
                     json *reflact = new json;
-                    if(handle_group_chat(json_quest,reflact,db,*new_args->user_to_cfd,*new_args->user_to_group))
+                    if(handle_group_chat(json_quest,reflact,db,
+                        *new_args->user_to_cfd,*new_args->user_to_group))
                         sendjson(*reflact,new_args->cfd);
                     delete reflact;
                     break;
@@ -823,21 +829,24 @@ class serve{
                 }
                 case(BREAK_GROUP):{
                     json *reflact = new json;
-                    if(handle_break_group(json_quest,reflact,db,*new_args->user_to_cfd,new_args->user_to_group))
+                    if(handle_break_group(json_quest,reflact,db,
+                        *new_args->user_to_cfd,new_args->user_to_group))
                         sendjson(*reflact,new_args->cfd);
                     delete reflact;
                     break;
                 }
                 case(KILL_GROUP_USER):{
                     json *reflact = new json;
-                    if(handle_kill_user(json_quest,reflact,db,*new_args->user_to_cfd,new_args->user_to_group))
+                    if(handle_kill_user(json_quest,reflact,db,
+                        *new_args->user_to_cfd,new_args->user_to_group))
                         sendjson(*reflact,new_args->cfd);
                     delete reflact;
                     break;
                 }
                 case(DELETE_GROUP):{
                     json *reflact = new json;
-                    if(handle_del_group(json_quest,reflact,db,*new_args->user_to_cfd,new_args->user_to_group))
+                    if(handle_del_group(json_quest,reflact,db,
+                        *new_args->user_to_cfd,new_args->user_to_group))
                         sendjson(*reflact,new_args->cfd);
                     delete reflact;
                     break;
