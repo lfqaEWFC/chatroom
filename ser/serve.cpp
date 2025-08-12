@@ -1183,7 +1183,8 @@ bool handle_history_pri(json json_quest, unique_ptr<database> &db,
 }
 
 bool handle_private_chat(json json_quest,unique_ptr<database> &db,json *reflact, 
-    unordered_map<string, string> *user_to_friend,unordered_map<int, string> cfd_to_user)
+                         unordered_map<string, string> *user_to_friend,
+                         unordered_map<int, string> cfd_to_user,bool pri_redis_flag)
 {
     string sender = json_quest["from"];
     string receiver = json_quest["to"];
@@ -1193,122 +1194,91 @@ bool handle_private_chat(json json_quest,unique_ptr<database> &db,json *reflact,
     string safe_message = db->escape_mysql_string_full(json_quest["message"]);
     bool file_flag = json_quest["file_flag"];
 
-    if(file_flag){
-
+    MYSQL_RES *res = db->query_sql("SELECT status FROM friendship WHERE username = '"+safe_sender+"' "
+                                    "AND friend_username = '"+safe_receiver+"'");
+    if(res == nullptr){
+        cout << "SELECT failed" << endl;
+        *reflact = {
+            {"sort",ERROR}, 
+            {"reflact","MYSQL SELECT ERROR"}
+        };
+        return true;
     }
-    else{
-        MYSQL_RES *res = db->query_sql("SELECT status FROM friendship WHERE username = '"+safe_sender+"' "
-                                       "AND friend_username = '"+safe_receiver+"'");
-        if(res == nullptr){
-            cout << "SELECT failed" << endl;
-            *reflact = {
-                {"sort",ERROR}, 
-                {"reflact","MYSQL SELECT ERROR"}
-            };
-            return true;
-        }
-        MYSQL_ROW row = mysql_fetch_row(res);
-        if(row){
-            string status_str = row[0];
-            int status = stoi(status_str);
-            if(status == 3){
-                *reflact = {
-                    {"sort",MESSAGE},
-                    {"request",ADD_BLACKLIST},
-                    {"reflact","你已被"+receiver+"加入黑名单..."}                
-                };
-                cout << "delete user_to_friend: "+sender+"" << endl;
-                (*user_to_friend).erase(sender);
-                return true;
-            }  
-        }
-        else{
+    MYSQL_ROW row = mysql_fetch_row(res);
+    if(row){
+        string status_str = row[0];
+        int status = stoi(status_str);
+        if(status == 3){
             *reflact = {
                 {"sort",MESSAGE},
                 {"request",ADD_BLACKLIST},
-                {"reflact","你已被"+receiver+"删除..."}                
+                {"reflact","你已被"+receiver+"加入黑名单..."}                
             };
             cout << "delete user_to_friend: "+sender+"" << endl;
             (*user_to_friend).erase(sender);
             return true;
-        }
+        }  
+    }
+    else{
+        *reflact = {
+            {"sort",MESSAGE},
+            {"request",ADD_BLACKLIST},
+            {"reflact","你已被"+receiver+"删除..."}                
+        };
+        cout << "delete user_to_friend: "+sender+"" << endl;
+        (*user_to_friend).erase(sender);
+        return true;
+    }
 
-        bool sql_chk = db->execute_sql("INSERT INTO private_message(sender, receiver, content) "
-                                       "VALUES('" +safe_sender+ "','" +safe_receiver+ "','"+safe_message+"')");
-        if(sql_chk == false){
-            cout << "INSERT failed" << endl;
-            *reflact = {
-                {"sort",ERROR}, 
-                {"reflact","MYSQL INSERT ERROR"}
-            };
-            return true;
-        }
+    bool sql_chk = db->execute_sql("INSERT INTO private_message(sender, receiver, content) "
+                                    "VALUES('" +safe_sender+ "','" +safe_receiver+ "','"+safe_message+"')");
+    if(sql_chk == false){
+        cout << "INSERT failed" << endl;
+        *reflact = {
+            {"sort",ERROR}, 
+            {"reflact","MYSQL INSERT ERROR"}
+        };
+        return true;
+    }
 
-        auto it = cfd_to_user.begin();
-        for (; it != cfd_to_user.end(); ++it) {
-            if (it->second == receiver) {
-                int cfd = it->first;
-                if((*user_to_friend)[receiver] == sender){                   
-                    json send_msg = {
-                        {"sort",MESSAGE},
-                        {"request",PEER_CHAT},
-                        {"sender",sender},
-                        {"receiver",receiver},
-                        {"message",message}
-                    };
-                    sendjson(send_msg,cfd);
-                    return false;
-                }
-                else{
-                    json send_msg = {
-                        {"sort",MESSAGE},
-                        {"request",NON_PEER_CHAT},
-                        {"message","通知: 好友"+sender+"向您发送了一条新消息"}
-                    };
-                    sendjson(send_msg,cfd);
-                    return false;
-                }
-            }
-        }
-        if(it == cfd_to_user.end()){
-            bool redis_chk = true;
-            string redis_key = "offline:private:" + receiver;
-            redisReply *reply = db->execRedis("HEXISTS "+redis_key+" "+sender+"");
-            if(reply == nullptr) redis_chk = false;
-            else if(reply->type == REDIS_REPLY_INTEGER){
-                if(reply->integer == 1){
-                    freeReplyObject(reply);
-                    cout << "increasing..." << endl;
-                    reply = db->execRedis("HINCRBY "+redis_key+" "+sender+" 1");
-                    if(reply == nullptr) redis_chk = false;
-                }
-                else{
-                    freeReplyObject(reply);
-                    cout << "setting..." << endl;
-                    reply = db->execRedis("HSET "+redis_key+" "+sender+" 1");
-                    if(reply == nullptr) redis_chk = false;
-                }
+    if(pri_redis_flag){
+        bool redis_chk = true;
+        string redis_key = "offline:private:" + receiver;
+        redisReply *reply = db->execRedis("HEXISTS "+redis_key+" "+sender+"");
+        if(reply == nullptr) redis_chk = false;
+        else if(reply->type == REDIS_REPLY_INTEGER){
+            if(reply->integer == 1){
+                freeReplyObject(reply);
+                cout << "increasing..." << endl;
+                reply = db->execRedis("HINCRBY "+redis_key+" "+sender+" 1");
+                if(reply == nullptr) redis_chk = false;
             }
             else{
                 freeReplyObject(reply);
-                cout << "redis reply type is wrong" << endl;
-                *reflact = {
-                    {"sort",ERROR}, 
-                    {"reflact","redis reply type is wrong"}
-                };
-                return true;
+                cout << "setting..." << endl;
+                reply = db->execRedis("HSET "+redis_key+" "+sender+" 1");
+                if(reply == nullptr) redis_chk = false;
             }
-            if(!redis_chk){
-                freeReplyObject(reply);
-                cout << "redis hash wrong" << endl;
-                *reflact = {
-                    {"sort",ERROR}, 
-                    {"reflact","redis hash wrong"}
-                };
-                return true;
-            }
-            if (reply) freeReplyObject(reply);
         }
+        else{
+            freeReplyObject(reply);
+            cout << "redis reply type is wrong" << endl;
+            *reflact = {
+                {"sort",ERROR}, 
+                {"reflact","redis reply type is wrong"}
+            };
+            return true;
+        }
+        if(!redis_chk){
+            freeReplyObject(reply);
+            cout << "redis hash wrong" << endl;
+            *reflact = {
+                {"sort",ERROR}, 
+                {"reflact","redis hash wrong"}
+            };
+            return true;
+        }
+        if (reply) freeReplyObject(reply);
     }
 
     return false;
@@ -2950,11 +2920,12 @@ bool handle_group_history(json json_quest,json* reflact,unique_ptr<database>&db)
 bool handle_group_chat(json json_quest, json* reflact, unique_ptr<database>& db,
                        unordered_map<string, int> user_to_cfd, unordered_map<string, int> user_to_group)
 {
+    long gid = json_quest["gid"];
     string message = json_quest["message"];
     string username = json_quest["username"];
     string safe_message = db->escape_mysql_string_full(message);
     string safe_username = db->escape_mysql_string_full(username);
-    long gid = json_quest["gid"];
+    
 
     string sql = "INSERT INTO group_message (group_id, username, message, created_at) VALUES (";
     sql += to_string(gid) + 
@@ -2969,54 +2940,7 @@ bool handle_group_chat(json json_quest, json* reflact, unique_ptr<database>& db,
         };
         return true;
     }
-
-    MYSQL_RES* res = db->query_sql(
-        "SELECT username FROM group_members "
-        "WHERE group_id = " + to_string(gid) + " "
-        "AND username <> '" + safe_username + "' "
-        "AND status != 0;"
-    );
-    if (res == nullptr)
-    {
-        *reflact = {
-            {"sort", ERROR},
-            {"reflact", "MySQL 查询群成员失败"}
-        };
-        return true;
-    }
-
-    MYSQL_ROW row;
-    while ((row = mysql_fetch_row(res)) != nullptr)
-    {
-        string receiver = row[0];
-        auto it = user_to_cfd.find(receiver);
-        int cfd = (it != user_to_cfd.end()) ? it->second : 0;
-        if (cfd == 0)
-            continue;
-
-        json send_json;
-        auto it_group = user_to_group.find(receiver);
-        if (it_group == user_to_group.end() || it_group->second != gid)
-        {
-            send_json = {
-                {"sort", MESSAGE},
-                {"request", NOT_PEER_GROUP},
-                {"message", "通知: gid为 " + to_string(gid) + " 的群组有一条新消息"}
-            };
-        }
-        else
-        {
-            send_json = {
-                {"sort", MESSAGE},
-                {"request", PEER_GROUP},
-                {"sender", username},
-                {"message", message}
-            };
-        }
-        sendjson(send_json, cfd);
-    }
-
-    db->free_result(res);
+    
     return false;
 }
 

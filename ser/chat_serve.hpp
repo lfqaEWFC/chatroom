@@ -30,6 +30,7 @@ typedef struct reactargs{
 typedef struct handle_recv_args{
     int cfd;
     string json_str;
+    bool pri_redis_flag = false;;
     unordered_map<int, string>* cfd_to_user;
     unordered_map<string, int>* user_to_cfd;
     unordered_map<string, string>* user_to_friend;
@@ -101,8 +102,6 @@ class serve{
                             perror("accept");
                             continue;
                         }
-
-                        set_nonblocking(cfd);
 
                         if(creatflag)
                         {
@@ -334,10 +333,12 @@ class serve{
                                             string username = it->second;
                                             if (!db) 
                                             {
-                                                db = make_unique<database>("localhost", 0, 
-                                                                           "root", nullptr, 
-                                                                           "chat_database", 
-                                                                           "localhost", 6379);
+                                                db = make_unique<database>(
+                                                    "localhost", 0, 
+                                                    "root", nullptr, 
+                                                    "chat_database", 
+                                                    "localhost", 6379
+                                                );
                                                 if (!db->is_connected()) 
                                                 {
                                                     cerr << "React Redis DB connect error" << endl;
@@ -387,8 +388,112 @@ class serve{
                             if (buffer.size() < 4 + json_len) break;
             
                             string json_str = buffer.substr(4, json_len);
-
                             handle_recv_args *args = new handle_recv_args;
+
+                            json json_quest;
+                            try {
+                                json_quest = json::parse(json_str);
+                            } catch (...) {
+                                cerr << "JSON parse error\n";
+                                return nullptr;
+                            }
+                            int request = json_quest["request"];
+                            if(json_quest["request"] == PRIVATE_CHAT)
+                            {
+                                string sender = json_quest["from"];
+                                string receiver = json_quest["to"];
+                                string message = json_quest["message"];
+
+                                auto it = (*pthargs->cfd_to_user).begin();
+                                for (; it != (*pthargs->cfd_to_user).end(); ++it) {
+                                    if (it->second == receiver) {
+                                        int cfd = it->first;
+                                        if((*pthargs->user_to_friend)[receiver] == sender){                   
+                                            json send_msg = {
+                                                {"sort",MESSAGE},
+                                                {"request",PEER_CHAT},
+                                                {"sender",sender},
+                                                {"receiver",receiver},
+                                                {"message",message}
+                                            };
+                                            sendjson(send_msg,cfd);
+                                        }
+                                        else{
+                                            json send_msg = {
+                                                {"sort",MESSAGE},
+                                                {"request",NON_PEER_CHAT},
+                                                {"message","通知: 好友"+sender+"向您发送了一条新消息"}
+                                            };
+                                            sendjson(send_msg,cfd);;
+                                        }
+                                    }
+                                }
+                                if(it == (*pthargs->cfd_to_user).end())
+                                    args->pri_redis_flag = true;
+                            }
+                            if(json_quest["request"] == GROUP_CHAT)
+                            {
+                                long gid = json_quest["gid"];
+                                string message = json_quest["message"];
+                                string username = json_quest["username"];
+
+                                static thread_local unique_ptr<database> db = nullptr;
+                                if(!db)
+                                {
+                                    db = make_unique<database>(
+                                        "localhost", 0, 
+                                        "root", nullptr, 
+                                        "chat_database", 
+                                        "localhost", 6379
+                                    );
+                                    if (!db->is_connected()) 
+                                    {
+                                        cerr << "React Redis DB connect error" << endl;
+                                    }
+                                }
+
+                                string safe_username = db->escape_mysql_string_full(username);
+                                MYSQL_RES* res = db->query_sql(
+                                    "SELECT username FROM group_members "
+                                    "WHERE group_id = " + to_string(gid) + " "
+                                    "AND username <> '" + safe_username + "' "
+                                    "AND status != 0;"
+                                );
+
+                                MYSQL_ROW row;
+                                while ((row = mysql_fetch_row(res)) != nullptr)
+                                {
+                                    string receiver = row[0];
+                                    auto it = (*pthargs->user_to_cfd).find(receiver);
+                                    int cfd = (it != (*pthargs->user_to_cfd).end()) ? it->second : 0;
+                                    if (cfd == 0)
+                                        continue;
+
+                                    json send_json;
+                                    auto it_group = (*pthargs->user_to_group).find(receiver);
+                                    if (it_group == (*pthargs->user_to_group).end() || it_group->second != gid)
+                                    {
+                                        send_json = {
+                                            {"sort", MESSAGE},
+                                            {"request", NOT_PEER_GROUP},
+                                            {"message", 
+                                            "通知: gid为 " + to_string(gid) + " 的群组有一条新消息"}
+                                        };
+                                    }
+                                    else
+                                    {
+                                        send_json = {
+                                            {"sort", MESSAGE},
+                                            {"request", PEER_GROUP},
+                                            {"sender", username},
+                                            {"message", message}
+                                        };
+                                    }
+                                    sendjson(send_json, cfd);
+                                }
+                                db->free_result(res);
+                            }
+
                             args->cfd = evlist[i].data.fd;
                             args->cfd_to_user = pthargs->cfd_to_user;
                             args->user_to_cfd = pthargs->user_to_cfd;
@@ -548,7 +653,8 @@ class serve{
                 }
                 case(PRIVATE_CHAT):{
                     json *reflact = new json;
-                    if(handle_private_chat(json_quest,db,reflact,new_args->user_to_friend,*new_args->cfd_to_user))
+                    if(handle_private_chat(json_quest,db,reflact,new_args->user_to_friend,
+                        *new_args->cfd_to_user,new_args->pri_redis_flag))
                         sendjson(*reflact,new_args->cfd);
                     delete reflact;
                     break;
